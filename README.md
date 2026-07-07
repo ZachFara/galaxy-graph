@@ -5,16 +5,16 @@
 # Galaxy Graph
 
 An Obsidian plugin that renders your entire vault as a navigable 3D force-directed
-graph. Explore your second brain like a galaxy — orbit, zoom, pan, click nodes to
+graph. Explore your second brain like a galaxy: orbit, zoom, pan, click nodes to
 inspect them, and double-click to fly the camera toward any note.
 
 ## Demo
 
-**Exploring a vault** — orbiting, clicking nodes, inspecting connections:
+**Exploring a vault**: orbiting, clicking nodes, inspecting connections:
 
 ![Exploring the galaxy](assets/demo_standard.gif)
 
-**Vault Timeline** — replaying your vault's history, notes appearing in the order
+**Vault Timeline**: replaying your vault's history, notes appearing in the order
 they were created:
 
 ![Timeline replay](assets/demo_timeline.gif)
@@ -79,9 +79,9 @@ Shows for the selected note:
 - Title (coloured by folder)
 - Out / In / Total connection counts
 - First ~200 chars of note body (frontmatter stripped)
-- "Open Note →" button — opens the file in a new tab
-- "Links to" list — notes this note wikilinks to (clickable, navigates selection)
-- "Linked from" list — notes that wikilink to this note
+- "Open Note →" button: opens the file in a new tab
+- "Links to" list: notes this note wikilinks to (clickable, navigates selection)
+- "Linked from" list: notes that wikilink to this note
 
 Clicking a hub note also shows its cluster growth over time and a scrollable
 local neighborhood list:
@@ -94,7 +94,7 @@ index status, or note activity depending on your settings.
 
 ## Performance note
 
-The plugin warns if your vault exceeds 2 000 notes. It still renders — it just
+The plugin warns if your vault exceeds 2 000 notes. It still renders, it just
 may be slower on older hardware. All graph state is in memory; nothing is written
 to disk.
 
