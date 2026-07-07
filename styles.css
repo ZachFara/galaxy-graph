@@ -1,0 +1,57 @@
+/* Galaxy Graph Plugin Styles */
+
+.galaxy-labels-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 5;
+}
+
+.galaxy-label {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.65);
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #ffffff;
+  white-space: nowrap;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
+  user-select: none;
+}
+
+.galaxy-settings-panel {
+  font-family: var(--font-interface);
+}
+
+.galaxy-settings-panel input[type="range"] {
+  -webkit-appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.10);
+  outline: none;
+}
+
+.galaxy-settings-panel input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #8ab4f8;
+  cursor: pointer;
+}
+
+.galaxy-settings-panel input[type="radio"],
+.galaxy-settings-panel input[type="checkbox"] {
+  accent-color: #8ab4f8;
+}
+
+.galaxy-settings-panel h3 {
+  border-bottom: 1px solid rgba(138, 180, 248, 0.15);
+  padding-bottom: 6px;
+}

@@ -1,0 +1,10 @@
+{
+  "id": "galaxy-graph",
+  "name": "Galaxy Graph",
+  "version": "1.0.0",
+  "minAppVersion": "1.4.0",
+  "description": "Explore your vault as a navigable 3D force-directed galaxy graph.",
+  "author": "Zachariah Farahany",
+  "authorUrl": "",
+  "isDesktopOnly": true
+}

@@ -1,0 +1,24 @@
+{
+  "name": "obsidian-galaxy-graph",
+  "version": "1.0.0",
+  "description": "3D force-directed galaxy graph for Obsidian",
+  "main": "main.js",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "node esbuild.config.mjs production"
+  },
+  "keywords": ["obsidian", "plugin", "graph", "3d"],
+  "author": "Zachariah Farahany",
+  "license": "MIT",
+  "dependencies": {
+    "3d-force-graph": "^1.73.5"
+  },
+  "devDependencies": {
+    "@types/node": "^16.18.0",
+    "builtin-modules": "^3.3.0",
+    "esbuild": "^0.20.0",
+    "obsidian": "latest",
+    "tslib": "^2.6.0",
+    "typescript": "^5.3.0"
+  }
+}
