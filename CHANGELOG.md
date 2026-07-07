@@ -1,6 +1,19 @@
 # Changelog
 
-## [0.3.0] — Sprint 3 (current)
+## [1.0.0] — Performance & Public Release (current)
+
+### Fixed
+- **Slow startup (5-10s)** — production builds were shipping unminified (`main.js` 3.29MB); esbuild now minifies production output, cutting bundle size to ~1.41MB
+- **Eager loading of heavy dependencies** — `three` and `3d-force-graph` were statically imported and initialized at plugin load time even when the Galaxy Graph view was never opened; these are now dynamically imported in parallel with view setup and only awaited right before the scene is built
+- **Intermittent multi-minute load / stuck graph** — a race condition in the `3d-force-graph` dependency chain (a 1ms debounce-based layout digest racing a `requestAnimationFrame`-scheduled tick) could leave the view stuck mid-load, especially under contention from other plugins; the render loop is now paused immediately after graph construction and resumed on the next tick, converting the race into a deterministic ordering
+- **Hardcoded folder labels** — the inspector panel's folder badge used a lookup table of one vault's specific folder names; labels are now derived generically from each note's actual top-level folder name
+
+### Changed
+- `manifest.json` / `package.json` author metadata corrected
+
+---
+
+## [0.3.0] — Sprint 3
 
 ### Fixed
 - **Galaxy drift on node drag** — auto-rotation now pauses immediately when a drag starts (`onNodeDrag`) and resumes 1 second after drag ends (`onNodeDragEnd`), preventing the entire graph from veering during interaction
