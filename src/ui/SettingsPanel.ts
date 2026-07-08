@@ -1,4 +1,4 @@
-import type { App } from "obsidian";
+import { getAllTags, type App } from "obsidian";
 import { DEFAULT_SETTINGS, type GalaxySettings } from "../settings";
 
 export interface SettingsPanelPlugin {
@@ -30,10 +30,13 @@ export function buildSettingsPanel(
 ) {
   panel.empty();
   const s = plugin.settings;
-  const rawVaultTags = (app.metadataCache as any).getTags?.() ?? {};
-  const vaultTags = Object.keys(rawVaultTags)
-    .map((t) => t.startsWith("#") ? t.slice(1) : t)
-    .sort((a, b) => a.localeCompare(b));
+  const tagSet = new Set<string>();
+  for (const file of app.vault.getMarkdownFiles()) {
+    const cache = app.metadataCache.getFileCache(file);
+    if (!cache) continue;
+    for (const t of getAllTags(cache) ?? []) tagSet.add(t.replace(/^#/, ""));
+  }
+  const vaultTags = [...tagSet].sort((a, b) => a.localeCompare(b));
 
   const header = panel.createDiv();
   header.style.cssText =
@@ -41,7 +44,7 @@ export function buildSettingsPanel(
     `padding:14px 16px;border-bottom:1px solid rgba(255,255,255,0.08);flex-shrink:0;`;
   const headerTitle = header.createEl("span");
   headerTitle.style.cssText = `font-size:14px;font-weight:600;color:#dcddde;`;
-  headerTitle.textContent = "Graph Settings";
+  headerTitle.textContent = "Graph settings";
   const closeBtn = header.createEl("button", { text: "✕" });
   closeBtn.style.cssText =
     `background:none;border:none;color:#888;cursor:pointer;font-size:16px;padding:0;`;
@@ -53,9 +56,9 @@ export function buildSettingsPanel(
   const section = (title: string) => {
     const sectionEl = body.createDiv();
     sectionEl.style.cssText = `margin-bottom:20px;`;
-    const h = sectionEl.createEl("h3");
+    const h = sectionEl.createDiv();
     h.style.cssText =
-      `font-size:11px;text-transform:uppercase;letter-spacing:0.8px;` +
+      `font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;` +
       `color:#8ab4f8;margin:0 0 10px;opacity:0.9;`;
     h.textContent = title;
     return sectionEl;
@@ -77,7 +80,7 @@ export function buildSettingsPanel(
     cb.flashSaved();
   };
 
-  const popSec = section("Popularity Dimension");
+  const popSec = section("Popularity dimension");
   const popOpts: Array<[GalaxySettings["popularityDimension"], string]> = [
     ["ctime", "Created time (ctime)"],
     ["mtime", "Modified time (mtime)"],
@@ -118,7 +121,7 @@ export function buildSettingsPanel(
     await save();
   };
 
-  const rotSec = section("Rotation Speed");
+  const rotSec = section("Rotation speed");
   const rotRow = rotSec.createDiv();
   rotRow.style.cssText = `display:flex;align-items:center;gap:8px;`;
   const rotSlider = rotRow.createEl("input") as HTMLInputElement;
@@ -137,12 +140,12 @@ export function buildSettingsPanel(
     await save();
   };
 
-  const colSec = section("Color Mapping");
+  const colSec = section("Color mapping");
   const colOpts: Array<[GalaxySettings["colorBy"], string]> = [
-    ["folder", "By Folder"],
-    ["index", "By Index vs Normal"],
-    ["tag", "By Tag"],
-    ["activity", "Activity Heat"],
+    ["folder", "By folder"],
+    ["index", "By index vs normal"],
+    ["tag", "By tag"],
+    ["activity", "Activity heat"],
   ];
   for (const [val, lbl] of colOpts) {
     const row = colSec.createDiv();
@@ -187,7 +190,7 @@ export function buildSettingsPanel(
 
   const tagMapRow = colSec.createDiv();
   tagMapRow.style.cssText = `margin-top:6px;display:${s.colorBy === "tag" ? "block" : "none"};`;
-  label(tagMapRow, "Tag → Color:");
+  label(tagMapRow, "Tag → color:");
   const tagList = tagMapRow.createDiv();
   tagList.style.cssText = `margin-bottom:6px;`;
 
@@ -386,7 +389,7 @@ export function buildSettingsPanel(
     };
   }
 
-  const linkSec = section("Link Opacity");
+  const linkSec = section("Link opacity");
   const opacSlider = (parent: HTMLElement, lbl: string, key: keyof GalaxySettings, min = 0, max = 1, step = 0.01) => {
     const row = parent.createDiv();
     row.style.cssText = `margin-bottom:10px;`;
@@ -417,7 +420,7 @@ export function buildSettingsPanel(
   opacSlider(linkSec, "Highlighted link opacity", "linkOpacityHighlight");
   opacSlider(linkSec, "Dimmed link opacity", "linkOpacityDim");
 
-  const fogSec = section("Index Fog");
+  const fogSec = section("Index fog");
   const fogRow = fogSec.createDiv();
   fogRow.style.cssText = `display:flex;align-items:center;gap:8px;margin-bottom:10px;`;
   const fogCheck = fogRow.createEl("input") as HTMLInputElement;
@@ -504,7 +507,7 @@ export function buildSettingsPanel(
   starSlider(bgSec, "Star size", "starSize", 0.3, 5.0, 0.1, 1);
   starSlider(bgSec, "Star brightness", "starBrightness", 0.1, 1.0, 0.05, 2);
 
-  const depthSec = section("Depth Elements");
+  const depthSec = section("Depth elements");
   const depthSlider = (
     parent: HTMLElement,
     labelText: string,
@@ -537,10 +540,14 @@ export function buildSettingsPanel(
   depthSlider(depthSec, "Ring opacity", "ringsOpacity");
   depthSlider(depthSec, "Ground grid opacity", "groundGridOpacity");
 
-  const tmplSec = section("Note Template");
+  const tmplSec = section("Note template");
   const tmplDesc = tmplSec.createEl("div");
   tmplDesc.style.cssText = `font-size:11px;color:#888;margin-bottom:8px;`;
-  tmplDesc.innerHTML = `Variables: <code>{{date}}</code> <code>{{index}}</code> <code>{{title}}</code> <code>{{folder}}</code>`;
+  tmplDesc.appendText("Variables: ");
+  for (const variable of ["{{date}}", "{{index}}", "{{title}}", "{{folder}}"]) {
+    tmplDesc.createEl("code", { text: variable });
+    tmplDesc.appendText(" ");
+  }
 
   const textarea = tmplSec.createEl("textarea") as HTMLTextAreaElement;
   textarea.value = s.noteTemplate;

@@ -7,7 +7,12 @@
     "dev": "node esbuild.config.mjs",
     "build": "node esbuild.config.mjs production"
   },
-  "keywords": ["obsidian", "plugin", "graph", "3d"],
+  "keywords": [
+    "obsidian",
+    "plugin",
+    "graph",
+    "3d"
+  ],
   "author": "Zachariah Farahany",
   "license": "MIT",
   "repository": {
@@ -24,6 +29,6 @@
     "esbuild": "^0.20.0",
     "obsidian": "latest",
     "tslib": "^2.6.0",
-    "typescript": "^5.3.0"
+    "typescript": "^5.9.3"
   }
 }

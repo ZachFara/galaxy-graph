@@ -62,7 +62,10 @@ export class InspectorPanel {
     stats.style.cssText =
       `display:flex;gap:14px;margin-bottom:10px;color:${this.colors.textMuted};font-size:12px;`;
     for (const [lbl, v] of [["Out", node.outDegree], ["In", node.inDegree], ["Total", node.degree]] as [string, number][]) {
-      stats.createEl("span").innerHTML = `<span style="opacity:0.6">${lbl}:</span> ${v}`;
+      const stat = stats.createEl("span");
+      const label = stat.createSpan({ text: `${lbl}:` });
+      label.style.opacity = "0.6";
+      stat.appendText(` ${v}`);
     }
 
     const badge = panel.createEl("span");
@@ -81,7 +84,7 @@ export class InspectorPanel {
       if (!previewText) preview.style.fontStyle = "normal";
     });
 
-    const openBtn = panel.createEl("button", { text: "Open Note →" });
+    const openBtn = panel.createEl("button", { text: "Open note →" });
     openBtn.style.cssText =
       `width:100%;padding:6px;margin-bottom:12px;` +
       `background:rgba(79,195,247,0.10);border:1px solid rgba(79,195,247,0.30);` +
@@ -386,7 +389,7 @@ export class InspectorPanel {
     heading.style.cssText =
       `font-size:10px;color:${this.colors.textMuted};text-transform:uppercase;` +
       "letter-spacing:0.6px;margin-bottom:8px;opacity:0.7;";
-    heading.textContent = "Local Galaxy";
+    heading.textContent = "Local galaxy";
 
     const graphData = this.getGraphData();
     const neighborIds = new Set<string>();

@@ -135,7 +135,7 @@ export class GalaxyView extends ItemView {
       return b;
     };
 
-    btn("Reset View").onclick = () => this.resetView();
+    btn("Reset view").onclick = () => this.resetView();
 
     this.rotateBtnEl = btn("Rotate: ON");
     this.rotateBtnEl.onclick = () => this.toggleRotation();

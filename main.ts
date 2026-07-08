@@ -8,10 +8,10 @@ export default class GalaxyPlugin extends Plugin {
   async onload() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, (await this.loadData()) ?? {});
     this.registerView(VIEW_TYPE_GALAXY, (leaf: WorkspaceLeaf) => new GalaxyView(leaf, this));
-    this.addRibbonIcon("share-2", "Open Galaxy Graph", () => this.openView());
+    this.addRibbonIcon("share-2", "Open galaxy view", () => this.openView());
     this.addCommand({
-      id: "open-galaxy-graph",
-      name: "Open Galaxy Graph",
+      id: "open",
+      name: "Open galaxy view",
       callback: () => this.openView(),
     });
   }
@@ -28,9 +28,5 @@ export default class GalaxyPlugin extends Plugin {
       await leaf.setViewState({ type: VIEW_TYPE_GALAXY, active: true });
     }
     workspace.revealLeaf(leaf);
-  }
-
-  onunload() {
-    this.app.workspace.detachLeavesOfType(VIEW_TYPE_GALAXY);
   }
 }
