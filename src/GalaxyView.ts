@@ -55,8 +55,6 @@ export class GalaxyView extends ItemView {
   private resizeObserver: ResizeObserver | null = null;
   private themeAccent = "#7c5cbf";
   private themeBg = "#000b1a";
-  private textNormal = "#dcddde";
-  private textMuted = "#888888";
   private autoRotating = true;
   private rotationFrameId: number | null = null;
   private rotateBtnEl: HTMLElement | null = null;
@@ -107,33 +105,20 @@ export class GalaxyView extends ItemView {
     const cssVar = (v: string, fb: string) => style.getPropertyValue(v).trim() || fb;
     this.themeAccent = cssVar("--interactive-accent", "#7c5cbf");
     this.themeBg = cssVar("--background-primary", "#000b1a");
-    this.textNormal = cssVar("--text-normal", "#dcddde");
-    this.textMuted = cssVar("--text-muted", "#888888");
 
     const root = this.contentEl;
     root.empty();
-    root.style.cssText = `position:relative;overflow:hidden;background:${this.themeBg};padding:0;`;
+    root.addClass("galaxy-view-root");
 
-    this.graphContainer = root.createDiv();
-    this.graphContainer.style.cssText = "position:absolute;inset:0;width:100%;height:100%;";
+    this.graphContainer = root.createDiv({ cls: "galaxy-canvas" });
 
     this.labelOverlayEl = root.createDiv();
     this.labelOverlayEl.id = "galaxy-labels-overlay";
     this.labelOverlayEl.className = "galaxy-labels-overlay";
 
-    const bar = root.createDiv();
-    bar.style.cssText =
-      "position:absolute;top:12px;left:12px;z-index:10;" +
-      "display:flex;gap:8px;align-items:center;flex-wrap:wrap;";
+    const bar = root.createDiv({ cls: "galaxy-topbar" });
 
-    const btn = (text: string) => {
-      const b = bar.createEl("button", { text });
-      b.style.cssText =
-        `background:rgba(255,255,255,0.07);color:${this.textNormal};` +
-        "border:1px solid rgba(255,255,255,0.18);padding:4px 10px;" +
-        "border-radius:4px;cursor:pointer;font-size:12px;white-space:nowrap;";
-      return b;
-    };
+    const btn = (text: string) => bar.createEl("button", { text, cls: "galaxy-topbar-btn" });
 
     btn("Reset view").onclick = () => this.resetView();
 
@@ -150,14 +135,12 @@ export class GalaxyView extends ItemView {
     this.timelineBtnEl = btn("Timeline: OFF");
     this.timelineBtnEl.onclick = () => this.toggleTimeline();
 
-    this.timelineSpeedBar = bar.createDiv();
-    this.timelineSpeedBar.style.cssText = `display:none;gap:4px;`;
+    this.timelineSpeedBar = bar.createDiv({ cls: "galaxy-timeline-speedbar" });
     for (const spd of [0.5, 1, 2, 4]) {
-      const sBtn = this.timelineSpeedBar.createEl("button", { text: `${spd}x` });
-      sBtn.style.cssText =
-        `background:rgba(255,255,255,0.07);color:${this.textNormal};` +
-        "border:1px solid rgba(255,255,255,0.18);padding:3px 7px;" +
-        "border-radius:4px;cursor:pointer;font-size:11px;";
+      const sBtn = this.timelineSpeedBar.createEl("button", {
+        text: `${spd}x`,
+        cls: "galaxy-topbar-btn galaxy-topbar-btn--small",
+      });
       sBtn.onclick = () => {
         this.timelineSpeed = spd;
         if (this.timelineActive) {
@@ -167,20 +150,11 @@ export class GalaxyView extends ItemView {
       };
     }
 
-    this.timelineDateEl = bar.createEl("span");
-    this.timelineDateEl.style.cssText = `color:#8ab4f8;font-size:11px;display:none;`;
+    this.timelineDateEl = bar.createEl("span", { cls: "galaxy-timeline-date" });
 
-    const countLabel = bar.createEl("span");
-    countLabel.style.cssText = "color:rgba(255,255,255,0.30);font-size:11px;";
+    const countLabel = bar.createEl("span", { cls: "galaxy-count-label" });
 
-    this.settingsPanelEl = root.createDiv();
-    this.settingsPanelEl.className = "galaxy-settings-panel";
-    this.settingsPanelEl.style.cssText =
-      `position:absolute;top:0;right:0;width:320px;height:100%;` +
-      `background:#0d1117;border-left:1px solid rgba(100,150,255,0.20);` +
-      `z-index:20;display:flex;flex-direction:column;` +
-      `transform:translateX(100%);transition:transform 0.3s ease-in-out;` +
-      `overflow:hidden;`;
+    this.settingsPanelEl = root.createDiv({ cls: "galaxy-settings-panel" });
     buildSettingsPanel(this.settingsPanelEl, this.plugin, this.app, {
       closeSettingsPanel: () => this.closeSettingsPanel(),
       refreshNodeColors: () => this.refreshNodeColors(),
@@ -197,20 +171,13 @@ export class GalaxyView extends ItemView {
       setSavedEl: (el) => { this.savedEl = el; },
     });
 
-    this.inspectorEl = root.createDiv();
-    this.inspectorEl.style.cssText =
-      `position:absolute;top:12px;right:12px;width:270px;z-index:10;` +
-      `background:${this.themeBg};border:1px solid rgba(100,150,255,0.25);` +
-      `border-radius:8px;padding:14px;display:none;color:${this.textNormal};` +
-      `backdrop-filter:blur(12px);max-height:82vh;overflow-y:auto;` +
-      "font-size:13px;line-height:1.55;";
+    this.inspectorEl = root.createDiv({ cls: "galaxy-inspector" });
 
     this.inspectorPanel = new InspectorPanel(
       this.inspectorEl,
       this.app,
       () => this.plugin.settings,
       () => this.graphData,
-      { textMuted: this.textMuted },
       {
         updateHighlight: (node) => this.updateHighlight(node),
         flyToNode: (node, dist, duration) => this.flyToNode(node, dist, duration),
@@ -471,8 +438,8 @@ export class GalaxyView extends ItemView {
 
     this.timelineActive = true;
     if (this.timelineBtnEl) this.timelineBtnEl.textContent = "Timeline: ON";
-    if (this.timelineSpeedBar) this.timelineSpeedBar.style.display = "flex";
-    if (this.timelineDateEl) this.timelineDateEl.style.display = "inline";
+    this.timelineSpeedBar?.addClass("is-visible");
+    this.timelineDateEl?.addClass("is-visible");
 
     // Cinematic forces for timeline — restored to user settings when timeline ends
     this.graph.d3Force("charge")?.strength?.(-120);
@@ -595,9 +562,9 @@ export class GalaxyView extends ItemView {
 
     this.timelineActive = false;
     if (this.timelineBtnEl) this.timelineBtnEl.textContent = "Timeline: OFF";
-    if (this.timelineSpeedBar) this.timelineSpeedBar.style.display = "none";
+    this.timelineSpeedBar?.removeClass("is-visible");
     if (this.timelineDateEl) {
-      this.timelineDateEl.style.display = "none";
+      this.timelineDateEl.removeClass("is-visible");
       this.timelineDateEl.textContent = "";
     }
 
@@ -783,12 +750,12 @@ export class GalaxyView extends ItemView {
       if (x < -50 || x > width + 50 || y < -20 || y > height + 20) continue;
 
       const color = getNodeColor(node, this.plugin.settings);
-      const labelEl = this.labelOverlayEl.createDiv();
-      labelEl.className = "galaxy-label";
-      labelEl.style.cssText = `left:${x}px;top:${y}px;transform:translate(-50%,-150%);`;
+      const labelEl = this.labelOverlayEl.createDiv({ cls: "galaxy-label" });
+      labelEl.style.left = `${x}px`;
+      labelEl.style.top = `${y}px`;
 
-      const dot = labelEl.createEl("span");
-      dot.style.cssText = `width:6px;height:6px;border-radius:50%;background:${color};flex-shrink:0;`;
+      const dot = labelEl.createEl("span", { cls: "galaxy-label-dot" });
+      dot.style.background = color;
 
       const text = labelEl.createEl("span");
       text.textContent = node.name;
@@ -921,21 +888,17 @@ export class GalaxyView extends ItemView {
   }
 
   private openSettingsPanel() {
-    if (!this.settingsPanelEl) return;
-    this.settingsPanelEl.style.transform = "translateX(0)";
+    this.settingsPanelEl?.addClass("is-open");
   }
 
   private closeSettingsPanel() {
-    if (!this.settingsPanelEl) return;
-    this.settingsPanelEl.style.transform = "translateX(100%)";
+    this.settingsPanelEl?.removeClass("is-open");
   }
 
   private flashSaved() {
     if (!this.savedEl) return;
-    this.savedEl.style.opacity = "1";
-    setTimeout(() => {
-      if (this.savedEl) this.savedEl.style.opacity = "0";
-    }, 1500);
+    this.savedEl.addClass("is-visible");
+    setTimeout(() => this.savedEl?.removeClass("is-visible"), 1500);
   }
 
   private recomputeActivityHeat() {

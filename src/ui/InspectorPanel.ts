@@ -21,7 +21,6 @@ export class InspectorPanel {
     private app: App,
     private getSettings: () => GalaxySettings,
     private getGraphData: () => { nodes: GNode[]; links: GLink[] },
-    private colors: { textMuted: string },
     private actions: InspectorPanelActions,
     private getFlyDist: () => number,
     private flyDurSingle: number,
@@ -45,61 +44,40 @@ export class InspectorPanel {
 
     const fc = FOLDER_PALETTE[node.folder] ?? DEFAULT_COLOR;
 
-    const header = panel.createDiv();
-    header.style.cssText =
-      "display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;";
-    const title = header.createEl("span");
-    title.style.cssText =
-      `font-weight:600;font-size:14px;color:${fc};flex:1;word-break:break-word;line-height:1.3;`;
+    const header = panel.createDiv({ cls: "galaxy-inspector-header" });
+    const title = header.createEl("span", { cls: "galaxy-inspector-title" });
+    title.style.color = fc;
     title.textContent = node.name;
-    const closeBtn = header.createEl("button", { text: "×" });
-    closeBtn.style.cssText =
-      `background:none;border:none;color:${this.colors.textMuted};cursor:pointer;` +
-      "font-size:20px;padding:0 0 0 8px;line-height:1;flex-shrink:0;";
+    const closeBtn = header.createEl("button", { text: "×", cls: "galaxy-inspector-close" });
     closeBtn.onclick = () => { this.actions.clearHighlight(); this.hide(); };
 
-    const stats = panel.createDiv();
-    stats.style.cssText =
-      `display:flex;gap:14px;margin-bottom:10px;color:${this.colors.textMuted};font-size:12px;`;
+    const stats = panel.createDiv({ cls: "galaxy-inspector-stats" });
     for (const [lbl, v] of [["Out", node.outDegree], ["In", node.inDegree], ["Total", node.degree]] as [string, number][]) {
       const stat = stats.createEl("span");
-      const label = stat.createSpan({ text: `${lbl}:` });
-      label.style.opacity = "0.6";
+      stat.createSpan({ text: `${lbl}:`, cls: "galaxy-stat-label" });
       stat.appendText(` ${v}`);
     }
 
-    const badge = panel.createEl("span");
-    badge.style.cssText =
-      `display:inline-block;margin-bottom:10px;padding:2px 7px;border-radius:3px;` +
-      `font-size:11px;background:rgba(255,255,255,0.05);color:${fc};border:1px solid ${fc}44;`;
+    const badge = panel.createEl("span", { cls: "galaxy-inspector-badge" });
+    badge.style.color = fc;
+    badge.style.border = `1px solid ${fc}44`;
     badge.textContent = node.folderName;
 
-    const preview = panel.createDiv();
-    preview.style.cssText =
-      `font-size:12px;color:${this.colors.textMuted};font-style:italic;margin:8px 0 12px;` +
-      "border-left:2px solid rgba(255,255,255,0.07);padding-left:8px;min-height:16px;";
+    const preview = panel.createDiv({ cls: "galaxy-inspector-preview" });
     preview.textContent = "Loading preview…";
     this.loadPreview(node.filePath).then((previewText) => {
       preview.textContent = previewText || "(empty)";
-      if (!previewText) preview.style.fontStyle = "normal";
+      if (!previewText) preview.addClass("is-plain");
     });
 
-    const openBtn = panel.createEl("button", { text: "Open note →" });
-    openBtn.style.cssText =
-      `width:100%;padding:6px;margin-bottom:12px;` +
-      `background:rgba(79,195,247,0.10);border:1px solid rgba(79,195,247,0.30);` +
-      `color:#4fc3f7;border-radius:5px;cursor:pointer;font-size:12px;`;
+    const openBtn = panel.createEl("button", { text: "Open note →", cls: "galaxy-open-btn" });
     openBtn.onclick = () => {
       const file = this.app.vault.getAbstractFileByPath(node.filePath);
       if (file instanceof TFile) this.app.workspace.getLeaf("tab").openFile(file);
     };
 
     const truncTitle = node.name.length > 20 ? node.name.slice(0, 20) + "…" : node.name;
-    const addNoteBtn = panel.createEl("button", { text: `+ Add note to ${truncTitle}` });
-    addNoteBtn.style.cssText =
-      `width:100%;padding:6px;margin-bottom:12px;` +
-      `background:rgba(129,199,132,0.10);border:1px solid rgba(129,199,132,0.30);` +
-      `color:#81c784;border-radius:5px;cursor:pointer;font-size:12px;`;
+    const addNoteBtn = panel.createEl("button", { text: `+ Add note to ${truncTitle}`, cls: "galaxy-add-btn" });
     addNoteBtn.onclick = async () => {
       try {
         const folderPath = node.filePath.includes("/") ? node.filePath.substring(0, node.filePath.lastIndexOf("/")) : "";
@@ -133,36 +111,29 @@ export class InspectorPanel {
       }
     };
 
-    if (outgoing.length > 0) this.renderLinkSection(panel, "Links to", outgoing, "#4fc3f7");
-    if (incoming.length > 0) this.renderLinkSection(panel, "Linked from", incoming, "#81c784");
+    if (outgoing.length > 0) this.renderLinkSection(panel, "Links to", outgoing, "galaxy-link-item--out");
+    if (incoming.length > 0) this.renderLinkSection(panel, "Linked from", incoming, "galaxy-link-item--in");
     if (!outgoing.length && !incoming.length) {
-      panel.createEl("p", { text: "No connections in the current graph." })
-        .style.cssText = `color:${this.colors.textMuted};font-size:12px;margin:0;opacity:0.6;`;
+      panel.createEl("p", { text: "No connections in the current graph.", cls: "galaxy-empty-note" });
     }
 
     this.renderSparkline(panel, node, this.buildActivityData(node));
     this.renderNeighborhoodGraph(panel, node, byId);
 
-    panel.style.display = "block";
+    panel.addClass("is-visible");
   }
 
   hide() {
-    this.el.style.display = "none";
+    this.el.removeClass("is-visible");
   }
 
-  private renderLinkSection(parent: HTMLElement, heading: string, nodes: GNode[], color: string) {
-    const lbl = parent.createEl("div");
-    lbl.style.cssText =
-      `font-size:10px;color:${this.colors.textMuted};text-transform:uppercase;` +
-      "letter-spacing:0.6px;margin-bottom:4px;margin-top:6px;opacity:0.7;";
-    lbl.textContent = heading;
+  private renderLinkSection(parent: HTMLElement, heading: string, nodes: GNode[], colorCls: string) {
+    parent.createEl("div", { text: heading, cls: "galaxy-section-heading" });
 
-    const list = parent.createEl("ul");
-    list.style.cssText = "margin:0 0 6px;padding:0 0 0 14px;";
+    const list = parent.createEl("ul", { cls: "galaxy-link-list" });
     const MAX = 12;
     for (const n of nodes.slice(0, MAX)) {
-      const a = list.createEl("li").createEl("a", { text: n.name });
-      a.style.cssText = `color:${color};cursor:pointer;font-size:12px;text-decoration:none;`;
+      const a = list.createEl("li").createEl("a", { text: n.name, cls: `galaxy-link-item ${colorCls}` });
       a.onclick = (e) => {
         e.preventDefault();
         this.actions.updateHighlight(n);
@@ -171,9 +142,7 @@ export class InspectorPanel {
       };
     }
     if (nodes.length > MAX) {
-      const more = list.createEl("li");
-      more.style.cssText = `color:${this.colors.textMuted};font-size:11px;list-style:none;opacity:0.6;`;
-      more.textContent = `+${nodes.length - MAX} more`;
+      list.createEl("li", { text: `+${nodes.length - MAX} more`, cls: "galaxy-link-more" });
     }
   }
 
@@ -265,27 +234,17 @@ export class InspectorPanel {
     totalNotes: number;
     indexName: string;
   }) {
-    const wrap = container.createDiv();
-    wrap.style.cssText =
-      "margin-top:14px;border-top:1px solid rgba(255,255,255,0.06);padding-top:10px;";
+    const wrap = container.createDiv({ cls: "galaxy-subpanel" });
 
-    const heading = wrap.createEl("div");
-    heading.style.cssText =
-      `font-size:10px;color:${this.colors.textMuted};text-transform:uppercase;` +
-      "letter-spacing:0.6px;margin-bottom:6px;opacity:0.7;";
-    heading.textContent = "Cluster growth · date field";
+    wrap.createEl("div", { text: "Cluster growth · date field", cls: "galaxy-section-heading" });
 
     if (data.totalNotes === 0) {
-      const empty = wrap.createEl("div");
-      empty.style.cssText = `font-size:11px;color:${this.colors.textMuted};font-style:italic;opacity:0.65;`;
-      empty.textContent = "No notes link to this index yet";
+      wrap.createEl("div", { text: "No notes link to this index yet", cls: "galaxy-empty-hint" });
       return;
     }
 
     if (data.totalNotes < 3 || data.monthly.length < 3) {
-      const summary = wrap.createEl("div");
-      summary.style.cssText = `font-size:11px;color:${this.colors.textMuted};opacity:0.8;`;
-      summary.textContent = `${data.totalNotes} notes in this cluster`;
+      wrap.createEl("div", { text: `${data.totalNotes} notes in this cluster`, cls: "galaxy-cluster-summary" });
       return;
     }
 
@@ -308,14 +267,15 @@ export class InspectorPanel {
     svg.setAttribute("width", `${width}`);
     svg.setAttribute("height", `${height}`);
     svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-    svg.style.display = "block";
+    svg.setAttribute("class", "galaxy-svg");
 
     const axis = document.createElementNS(NS, "line");
     axis.setAttribute("x1", `${padLeft}`);
     axis.setAttribute("y1", `${padTop + plotHeight}`);
     axis.setAttribute("x2", `${width - padRight}`);
     axis.setAttribute("y2", `${padTop + plotHeight}`);
-    axis.setAttribute("stroke", "rgba(255,255,255,0.18)");
+    axis.setAttribute("stroke", "currentColor");
+    axis.setAttribute("stroke-opacity", "0.18");
     axis.setAttribute("stroke-width", "1");
     svg.appendChild(axis);
 
@@ -342,7 +302,7 @@ export class InspectorPanel {
     const line = document.createElementNS(NS, "polyline");
     line.setAttribute("points", linePoints.join(" "));
     line.setAttribute("fill", "none");
-    line.setAttribute("stroke", "#ffffff");
+    line.setAttribute("stroke", "currentColor");
     line.setAttribute("stroke-width", "2");
     line.setAttribute("stroke-linejoin", "round");
     line.setAttribute("stroke-linecap", "round");
@@ -355,7 +315,7 @@ export class InspectorPanel {
       dot.setAttribute("cx", `${cx}`);
       dot.setAttribute("cy", `${cy}`);
       dot.setAttribute("r", "1.8");
-      dot.setAttribute("fill", "#ffffff");
+      dot.setAttribute("fill", "currentColor");
       svg.appendChild(dot);
     });
 
@@ -368,28 +328,23 @@ export class InspectorPanel {
       text.setAttribute("x", `${x}`);
       text.setAttribute("y", `${height - 6}`);
       text.setAttribute("text-anchor", "middle");
-      text.setAttribute("fill", "rgba(255,255,255,0.65)");
+      text.setAttribute("fill", "currentColor");
+      text.setAttribute("fill-opacity", "0.65");
       text.setAttribute("font-size", "8");
       svg.appendChild(text);
     });
 
     wrap.appendChild(svg);
 
-    const sub = wrap.createEl("div");
-    sub.style.cssText = `font-size:10px;color:${color};margin-top:4px;opacity:0.8;`;
+    const sub = wrap.createEl("div", { cls: "galaxy-note-count" });
+    sub.style.color = color;
     sub.textContent = `${data.totalNotes} total notes in ${data.indexName}`;
   }
 
   private renderNeighborhoodGraph(container: HTMLElement, centerNode: GNode, byId: Map<string, GNode>) {
-    const wrap = container.createDiv();
-    wrap.style.cssText =
-      "margin-top:14px;border-top:1px solid rgba(255,255,255,0.06);padding-top:10px;";
+    const wrap = container.createDiv({ cls: "galaxy-subpanel" });
 
-    const heading = wrap.createEl("div");
-    heading.style.cssText =
-      `font-size:10px;color:${this.colors.textMuted};text-transform:uppercase;` +
-      "letter-spacing:0.6px;margin-bottom:8px;opacity:0.7;";
-    heading.textContent = "Local galaxy";
+    const heading = wrap.createEl("div", { text: "Local galaxy", cls: "galaxy-section-heading" });
 
     const graphData = this.getGraphData();
     const neighborIds = new Set<string>();
@@ -404,26 +359,20 @@ export class InspectorPanel {
     if (neighbors.length === 0) return;
 
     if (neighbors.length > 20) {
-      heading.textContent = `Local Galaxy (list view — ${neighbors.length} neighbors)`;
+      heading.textContent = `Local galaxy (${neighbors.length} neighbors)`;
       const sorted = [...neighbors].sort((a, b) => b.degree - a.degree);
-      const list = wrap.createDiv();
-      list.style.cssText = `max-height:200px;overflow-y:auto;`;
+      const list = wrap.createDiv({ cls: "galaxy-neighbor-list" });
       for (const n of sorted) {
-        const item = list.createDiv();
-        item.style.cssText = `display:flex;align-items:center;gap:8px;padding:3px 0;cursor:pointer;`;
+        const item = list.createDiv({ cls: "galaxy-neighbor-item" });
         item.onclick = () => {
           this.actions.updateHighlight(n);
           this.show(n);
           this.actions.flyToNode(n, this.getFlyDist(), this.flyDurSingle);
         };
-        const dot = item.createEl("span");
-        dot.style.cssText = `width:8px;height:8px;border-radius:50%;flex-shrink:0;background:${getNodeColor(n, this.getSettings())};`;
-        const nameEl = item.createEl("span");
-        nameEl.style.cssText = `flex:1;font-size:11px;color:#dcddde;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;`;
-        nameEl.textContent = n.name;
-        const badge = item.createEl("span");
-        badge.style.cssText = `font-size:10px;color:#8ab4f8;flex-shrink:0;`;
-        badge.textContent = `${n.degree} links`;
+        const dot = item.createEl("span", { cls: "galaxy-neighbor-dot" });
+        dot.style.background = getNodeColor(n, this.getSettings());
+        item.createEl("span", { text: n.name, cls: "galaxy-neighbor-name" });
+        item.createEl("span", { text: `${n.degree} links`, cls: "galaxy-neighbor-degree" });
       }
       wrap.appendChild(list);
       return;
@@ -436,7 +385,7 @@ export class InspectorPanel {
     svg.setAttribute("width", `${W}`);
     svg.setAttribute("height", `${H}`);
     svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
-    svg.style.cssText = `display:block;cursor:pointer;`;
+    svg.setAttribute("class", "galaxy-svg galaxy-svg--clickable");
 
     const positions = new Map<string, { x: number; y: number }>();
     positions.set(centerNode.id, { x: CX, y: CY });
@@ -486,7 +435,6 @@ export class InspectorPanel {
       circle.setAttribute("r", `${r}`);
       circle.setAttribute("fill", color);
       circle.setAttribute("fill-opacity", isCenter ? "1.0" : "0.85");
-      circle.style.cursor = "pointer";
       if (!isCenter) {
         circle.onclick = () => {
           this.actions.updateHighlight(n);
@@ -503,9 +451,9 @@ export class InspectorPanel {
         svgText.setAttribute("x", `${pos.x}`);
         svgText.setAttribute("y", `${pos.y + r + 9}`);
         svgText.setAttribute("text-anchor", "middle");
-        svgText.setAttribute("fill", "rgba(200,200,220,0.65)");
+        svgText.setAttribute("fill", "currentColor");
+        svgText.setAttribute("fill-opacity", "0.65");
         svgText.setAttribute("font-size", "7");
-        svgText.style.pointerEvents = "none";
         svg.appendChild(svgText);
       }
     }
