@@ -13,14 +13,14 @@ export function computeActivityHeat(app: App, nodes: GNode[], settings: GalaxySe
   const indexCounts = new Map<string, number>();
   for (const file of app.vault.getMarkdownFiles()) {
     const cache = app.metadataCache.getFileCache(file);
-    const raw = cache?.frontmatter?.links ?? [];
-    const links = Array.isArray(raw) ? raw : [raw];
-    const rawDate = cache?.frontmatter?.date;
+    const raw: unknown = cache?.frontmatter?.links ?? [];
+    const links: unknown[] = Array.isArray(raw) ? raw : [raw];
+    const rawDate: unknown = cache?.frontmatter?.date;
     const parsed = rawDate ? new Date(String(rawDate)).getTime() : NaN;
     const noteTime = !isNaN(parsed) ? parsed : file.stat.ctime;
     if (now - noteTime > windowMs) continue;
     for (const link of links) {
-      const name = String(link).replace(/[\[\]]/g, "").split("|")[0].trim();
+      const name = String(link).replace(/[[\]]/g, "").split("|")[0].trim();
       if (name) indexCounts.set(name, (indexCounts.get(name) ?? 0) + 1);
     }
   }

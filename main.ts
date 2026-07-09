@@ -6,7 +6,8 @@ export default class GalaxyPlugin extends Plugin {
   settings: GalaxySettings = { ...DEFAULT_SETTINGS };
 
   async onload() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, (await this.loadData()) ?? {});
+    const saved = ((await this.loadData()) ?? {}) as Partial<GalaxySettings>;
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, saved);
     this.registerView(VIEW_TYPE_GALAXY, (leaf: WorkspaceLeaf) => new GalaxyView(leaf, this));
     this.addRibbonIcon("share-2", "Open galaxy view", () => this.openView());
     this.addCommand({
@@ -27,6 +28,6 @@ export default class GalaxyPlugin extends Plugin {
       leaf = workspace.getLeaf("tab");
       await leaf.setViewState({ type: VIEW_TYPE_GALAXY, active: true });
     }
-    workspace.revealLeaf(leaf);
+    await workspace.revealLeaf(leaf);
   }
 }

@@ -67,7 +67,7 @@ export function buildSettingsPanel(
   ];
   for (const [val, lbl] of popOpts) {
     const row = popSec.createDiv({ cls: "galaxy-radio-row" });
-    const radio = row.createEl("input") as HTMLInputElement;
+    const radio = row.createEl("input");
     radio.type = "radio";
     radio.name = "pop-dim";
     radio.value = val;
@@ -86,7 +86,7 @@ export function buildSettingsPanel(
   const fmRow = popSec.createDiv({ cls: "galaxy-subrow" });
   fmRow.style.display = s.popularityDimension === "frontmatter" ? "block" : "none";
   label(fmRow, "Field name:");
-  const fmInput = fmRow.createEl("input", { cls: "galaxy-input" }) as HTMLInputElement;
+  const fmInput = fmRow.createEl("input", { cls: "galaxy-input" });
   fmInput.type = "text";
   fmInput.value = s.popularityFrontmatterKey;
   fmInput.onchange = async () => {
@@ -97,7 +97,7 @@ export function buildSettingsPanel(
 
   const rotSec = section("Rotation speed");
   const rotRow = rotSec.createDiv({ cls: "galaxy-slider-flex-row" });
-  const rotSlider = rotRow.createEl("input", { cls: "galaxy-slider" }) as HTMLInputElement;
+  const rotSlider = rotRow.createEl("input", { cls: "galaxy-slider" });
   rotSlider.type = "range";
   rotSlider.min = "0";
   rotSlider.max = "0.01";
@@ -120,7 +120,7 @@ export function buildSettingsPanel(
   ];
   for (const [val, lbl] of colOpts) {
     const row = colSec.createDiv({ cls: "galaxy-radio-row" });
-    const radio = row.createEl("input") as HTMLInputElement;
+    const radio = row.createEl("input");
     radio.type = "radio";
     radio.name = "color-by";
     radio.value = val;
@@ -142,7 +142,7 @@ export function buildSettingsPanel(
   const indexThreshRow = colSec.createDiv({ cls: "galaxy-subrow" });
   indexThreshRow.style.display = s.colorBy === "index" ? "block" : "none";
   label(indexThreshRow, "Min connections to be index:");
-  const threshInput = indexThreshRow.createEl("input", { cls: "galaxy-input" }) as HTMLInputElement;
+  const threshInput = indexThreshRow.createEl("input", { cls: "galaxy-input" });
   threshInput.type = "number";
   threshInput.min = "1";
   threshInput.value = String(s.indexDegreeThreshold);
@@ -164,7 +164,7 @@ export function buildSettingsPanel(
     for (const [tag, color] of Object.entries(s.tagColorMap)) {
       const row = tagList.createDiv({ cls: "galaxy-tag-row" });
       row.createEl("span", { text: tag, cls: "galaxy-tag-name" });
-      const colorPicker = row.createEl("input", { cls: "galaxy-color-input" }) as HTMLInputElement;
+      const colorPicker = row.createEl("input", { cls: "galaxy-color-input" });
       colorPicker.type = "color";
       colorPicker.value = color;
       colorPicker.onchange = async () => {
@@ -184,7 +184,7 @@ export function buildSettingsPanel(
   renderTagList();
 
   const addTagRow = tagMapRow.createDiv({ cls: "galaxy-add-row" });
-  const newTagInput = addTagRow.createEl("input", { cls: "galaxy-input galaxy-input--flex" }) as HTMLInputElement;
+  const newTagInput = addTagRow.createEl("input", { cls: "galaxy-input galaxy-input--flex" });
   newTagInput.type = "text";
   newTagInput.placeholder = "tag name";
 
@@ -271,7 +271,7 @@ export function buildSettingsPanel(
   };
   newTagInput.onblur = () => window.setTimeout(hideSuggestions, 100);
 
-  const newTagColor = addTagRow.createEl("input", { cls: "galaxy-color-input galaxy-color-input--lg" }) as HTMLInputElement;
+  const newTagColor = addTagRow.createEl("input", { cls: "galaxy-color-input galaxy-color-input--lg" });
   newTagColor.type = "color";
   newTagColor.value = "#4fc3f7";
   const addTagBtn = addTagRow.createEl("button", { text: "Add", cls: "galaxy-accent-btn" });
@@ -290,7 +290,7 @@ export function buildSettingsPanel(
   activityRow.style.display = s.colorBy === "activity" ? "block" : "none";
   label(activityRow, "Activity window (days):");
   const activityWindowRow = activityRow.createDiv({ cls: "galaxy-slider-flex-row" });
-  const activitySlider = activityWindowRow.createEl("input", { cls: "galaxy-slider" }) as HTMLInputElement;
+  const activitySlider = activityWindowRow.createEl("input", { cls: "galaxy-slider" });
   activitySlider.type = "range";
   activitySlider.min = "7";
   activitySlider.max = "365";
@@ -311,7 +311,7 @@ export function buildSettingsPanel(
   const leafFieldRow = activityRow.createDiv({ cls: "galaxy-leaf-row" });
   for (const [val, lbl] of [["mtime", "Last modified"], ["ctime", "Created"]] as const) {
     const optRow = leafFieldRow.createDiv({ cls: "galaxy-radio-row galaxy-radio-row--inline" });
-    const radio = optRow.createEl("input") as HTMLInputElement;
+    const radio = optRow.createEl("input");
     radio.type = "radio";
     radio.name = "leaf-date-field";
     radio.value = val;
@@ -328,21 +328,28 @@ export function buildSettingsPanel(
   }
 
   const linkSec = section("Link opacity");
-  const opacSlider = (parent: HTMLElement, lbl: string, key: keyof GalaxySettings, min = 0, max = 1, step = 0.01) => {
+  const opacSlider = (
+    parent: HTMLElement,
+    lbl: string,
+    key: "linkOpacityDefault" | "linkOpacityHighlight" | "linkOpacityDim" | "fogMaxOpacity",
+    min = 0,
+    max = 1,
+    step = 0.01
+  ) => {
     const row = parent.createDiv({ cls: "galaxy-slider-block" });
     const labelRow = row.createDiv({ cls: "galaxy-slider-label-row" });
     labelRow.createEl("span", { text: lbl, cls: "galaxy-slider-name" });
     const valSpan = labelRow.createEl("span", { cls: "galaxy-slider-value" });
-    valSpan.textContent = (s[key] as number).toFixed(2);
-    const slider = row.createEl("input", { cls: "galaxy-slider--full" }) as HTMLInputElement;
+    valSpan.textContent = s[key].toFixed(2);
+    const slider = row.createEl("input", { cls: "galaxy-slider--full" });
     slider.type = "range";
     slider.min = String(min);
     slider.max = String(max);
     slider.step = String(step);
     slider.value = String(s[key]);
     slider.oninput = async () => {
-      (s as GalaxySettings & Record<string, number>)[key as string] = parseFloat(slider.value);
-      valSpan.textContent = (s[key] as number).toFixed(2);
+      s[key] = parseFloat(slider.value);
+      valSpan.textContent = s[key].toFixed(2);
       cb.refreshLinkColors();
       await save();
     };
@@ -354,7 +361,7 @@ export function buildSettingsPanel(
 
   const fogSec = section("Index fog");
   const fogRow = fogSec.createDiv({ cls: "galaxy-check-row" });
-  const fogCheck = fogRow.createEl("input") as HTMLInputElement;
+  const fogCheck = fogRow.createEl("input");
   fogCheck.type = "checkbox";
   fogCheck.checked = s.fogEnabled;
   const fogLabel = fogRow.createEl("span", { text: "Enable fog", cls: "galaxy-radio-label galaxy-radio-label--click" });
@@ -368,7 +375,7 @@ export function buildSettingsPanel(
   const fogModeDiv = fogSec.createDiv({ cls: "galaxy-slider-block" });
   for (const [val, lbl] of [["color", "Match index color"], ["heat", "Heat map (connections = heat)"]] as const) {
     const row = fogModeDiv.createDiv({ cls: "galaxy-radio-row" });
-    const radio = row.createEl("input") as HTMLInputElement;
+    const radio = row.createEl("input");
     radio.type = "radio";
     radio.name = "fog-mode";
     radio.value = val;
@@ -386,7 +393,7 @@ export function buildSettingsPanel(
 
   const bgSec = section("Background");
   const starsRow = bgSec.createDiv({ cls: "galaxy-check-row galaxy-check-row--tight" });
-  const starsCheck = starsRow.createEl("input") as HTMLInputElement;
+  const starsCheck = starsRow.createEl("input");
   starsCheck.type = "checkbox";
   starsCheck.checked = s.showStars;
   starsRow.createEl("span", { text: "Show starfield", cls: "galaxy-radio-label" });
@@ -401,16 +408,16 @@ export function buildSettingsPanel(
     const labelRow = row.createDiv({ cls: "galaxy-slider-label-row" });
     labelRow.createEl("span", { text: labelText, cls: "galaxy-slider-name" });
     const val = labelRow.createEl("span", { cls: "galaxy-slider-value" });
-    val.textContent = decimals === 0 ? String(s[key]) : (s[key] as number).toFixed(decimals);
-    const slider = row.createEl("input", { cls: "galaxy-slider--full" }) as HTMLInputElement;
+    val.textContent = decimals === 0 ? String(s[key]) : s[key].toFixed(decimals);
+    const slider = row.createEl("input", { cls: "galaxy-slider--full" });
     slider.type = "range";
     slider.min = String(min);
     slider.max = String(max);
     slider.step = String(step);
     slider.value = String(s[key]);
     slider.oninput = async () => {
-      (s as any)[key] = parseFloat(slider.value);
-      val.textContent = decimals === 0 ? String(Math.round(s[key] as number)) : (s[key] as number).toFixed(decimals);
+      s[key] = parseFloat(slider.value);
+      val.textContent = decimals === 0 ? String(Math.round(s[key])) : s[key].toFixed(decimals);
       cb.rebuildStars();
       await save();
     };
@@ -429,7 +436,7 @@ export function buildSettingsPanel(
   ) => {
     const row = parent.createDiv({ cls: "galaxy-slider-flex-row galaxy-slider-block" });
     row.createEl("span", { text: labelText, cls: "galaxy-slider-name galaxy-slider-name--flex" });
-    const slider = row.createEl("input", { cls: "galaxy-slider--compact" }) as HTMLInputElement;
+    const slider = row.createEl("input", { cls: "galaxy-slider--compact" });
     slider.type = "range";
     slider.min = "0";
     slider.max = String(max);
@@ -456,7 +463,7 @@ export function buildSettingsPanel(
     tmplDesc.appendText(" ");
   }
 
-  const textarea = tmplSec.createEl("textarea", { cls: "galaxy-input galaxy-template-textarea" }) as HTMLTextAreaElement;
+  const textarea = tmplSec.createEl("textarea", { cls: "galaxy-input galaxy-template-textarea" });
   textarea.value = s.noteTemplate;
   textarea.rows = 10;
   textarea.onchange = async () => {
@@ -477,16 +484,16 @@ export function buildSettingsPanel(
     const labelRow = row.createDiv({ cls: "galaxy-slider-label-row" });
     labelRow.createEl("span", { text: labelText, cls: "galaxy-slider-name" });
     const val = labelRow.createEl("span", { cls: "galaxy-slider-value" });
-    val.textContent = (s[key] as number).toFixed(decimals);
-    const slider = row.createEl("input", { cls: "galaxy-slider--full" }) as HTMLInputElement;
+    val.textContent = s[key].toFixed(decimals);
+    const slider = row.createEl("input", { cls: "galaxy-slider--full" });
     slider.type = "range";
     slider.min = String(min);
     slider.max = String(max);
     slider.step = String(step);
     slider.value = String(s[key]);
     slider.oninput = async () => {
-      (s as any)[key] = parseFloat(slider.value);
-      val.textContent = (s[key] as number).toFixed(decimals);
+      s[key] = parseFloat(slider.value);
+      val.textContent = s[key].toFixed(decimals);
       cb.refreshForces();
       await save();
     };
@@ -502,7 +509,7 @@ export function buildSettingsPanel(
   flyLabelRow.createEl("span", { text: "Click zoom distance", cls: "galaxy-slider-name" });
   const flyValSpan = flyLabelRow.createEl("span", { cls: "galaxy-slider-value" });
   flyValSpan.textContent = String(s.clickFlyDistance);
-  const flySlider = flyRow.createEl("input", { cls: "galaxy-slider--full" }) as HTMLInputElement;
+  const flySlider = flyRow.createEl("input", { cls: "galaxy-slider--full" });
   flySlider.type = "range";
   flySlider.min = "100";
   flySlider.max = "1500";
@@ -518,7 +525,7 @@ export function buildSettingsPanel(
 
   const labelSec = section("Labels");
   const labelRow = labelSec.createDiv({ cls: "galaxy-slider-flex-row" });
-  const labelSlider = labelRow.createEl("input", { cls: "galaxy-slider" }) as HTMLInputElement;
+  const labelSlider = labelRow.createEl("input", { cls: "galaxy-slider" });
   labelSlider.type = "range";
   labelSlider.min = "0";
   labelSlider.max = "30";
@@ -540,7 +547,7 @@ export function buildSettingsPanel(
   hideLabelRow.createEl("span", { text: "Hide labels when zoomed out past", cls: "galaxy-slider-name" });
   const hideVal = hideLabelRow.createEl("span", { cls: "galaxy-slider-value" });
   hideVal.textContent = String(s.labelHideDistance);
-  const hideSlider = hideRow.createEl("input", { cls: "galaxy-slider--full" }) as HTMLInputElement;
+  const hideSlider = hideRow.createEl("input", { cls: "galaxy-slider--full" });
   hideSlider.type = "range";
   hideSlider.min = "500";
   hideSlider.max = "8000";

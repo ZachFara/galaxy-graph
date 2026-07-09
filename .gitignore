@@ -7,7 +7,7 @@ node_modules/
 .env
 
 # raw source recordings for assets/ (full-res/full-length, too large for git)
-/standard_demonstration.mp4
-/over_time_demonstration.mp4
+assets/standard_demonstration.mp4
+assets/over_time_demonstration.mp4
 /galaxy_graph_image.png
 /local_galaxy.png

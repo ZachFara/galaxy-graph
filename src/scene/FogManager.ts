@@ -2,6 +2,7 @@ import * as THREE from "three";
 import type { GalaxySettings } from "../settings";
 import type { GNode } from "../types";
 import { DEFAULT_COLOR, FOLDER_PALETTE, heatColor } from "../utils/colors";
+import { disposeObject3D, disposeObject3DWithMaps } from "./dispose";
 
 export class FogManager {
   private fogGroup: THREE.Group | null = null;
@@ -13,7 +14,7 @@ export class FogManager {
 
   private createFogTexture(): THREE.CanvasTexture {
     const size = 128;
-    const canvas = document.createElement("canvas");
+    const canvas = activeDocument.createElement("canvas");
     canvas.width = canvas.height = size;
     const ctx = canvas.getContext("2d")!;
     const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
@@ -28,11 +29,7 @@ export class FogManager {
     this.fogNodeMap.clear();
     if (this.fogGroup) {
       this.scene.remove(this.fogGroup);
-      this.fogGroup.traverse((obj: any) => {
-        obj.geometry?.dispose();
-        if (Array.isArray(obj.material)) obj.material.forEach((m: any) => m.dispose());
-        else obj.material?.dispose();
-      });
+      this.fogGroup.traverse(disposeObject3D);
       this.fogGroup = null;
     }
 
@@ -88,15 +85,7 @@ export class FogManager {
   rebuildLabels(_nodes: GNode[], _topLabelCount: number) {
     if (!this.labelGroup) return;
     this.scene.remove(this.labelGroup);
-    this.labelGroup.traverse((obj: any) => {
-      obj.geometry?.dispose();
-      if (Array.isArray(obj.material)) {
-        obj.material.forEach((m: any) => { m.map?.dispose?.(); m.dispose?.(); });
-      } else {
-        obj.material?.map?.dispose?.();
-        obj.material?.dispose?.();
-      }
-    });
+    this.labelGroup.traverse(disposeObject3DWithMaps);
     this.labelGroup = null;
   }
 
@@ -106,24 +95,12 @@ export class FogManager {
     this.fogNodeMap.clear();
     if (this.fogGroup) {
       this.scene.remove(this.fogGroup);
-      this.fogGroup.traverse((obj: any) => {
-        obj.geometry?.dispose();
-        if (Array.isArray(obj.material)) obj.material.forEach((m: any) => m.dispose());
-        else obj.material?.dispose();
-      });
+      this.fogGroup.traverse(disposeObject3D);
       this.fogGroup = null;
     }
     if (this.labelGroup) {
       this.scene.remove(this.labelGroup);
-      this.labelGroup.traverse((obj: any) => {
-        obj.geometry?.dispose();
-        if (Array.isArray(obj.material)) {
-          obj.material.forEach((m: any) => { m.map?.dispose?.(); m.dispose?.(); });
-        } else {
-          obj.material?.map?.dispose?.();
-          obj.material?.dispose?.();
-        }
-      });
+      this.labelGroup.traverse(disposeObject3DWithMaps);
       this.labelGroup = null;
     }
     if (this.fogTexture) {

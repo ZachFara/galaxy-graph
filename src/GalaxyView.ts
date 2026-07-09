@@ -4,6 +4,7 @@ import { ItemView, Notice, TFile, WorkspaceLeaf } from "obsidian";
 // (expensive) module evaluation only happens when the Galaxy Graph view is actually
 // opened, rather than on every Obsidian startup for every user who has the plugin enabled.
 import type * as THREE from "three";
+import type { ForceGraph3DInstance } from "3d-force-graph";
 import { buildGraphData } from "./graph/GraphBuilder";
 import type { GalaxySettings } from "./settings";
 import type { FogManager } from "./scene/FogManager";
@@ -17,7 +18,6 @@ import { buildSettingsPanel } from "./ui/SettingsPanel";
 export const VIEW_TYPE_GALAXY = "galaxy-graph";
 const MAX_NODES_WARN = 2000;
 const DOUBLE_CLICK_MS = 280;
-const FLY_DIST_SINGLE = 400;
 const FLY_DIST_DOUBLE = 150;
 const FLY_DUR_SINGLE = 800;
 const FLY_DUR_DOUBLE = 600;
@@ -36,12 +36,25 @@ interface SpawnAnimationState {
   startTime: number;
 }
 
+type GalaxyGraph = ForceGraph3DInstance<GNode, GLink>;
+type GalaxyGraphCtor = new (
+  el: HTMLElement,
+  config?: { controlType?: "trackball" | "orbit" | "fly" },
+) => GalaxyGraph;
+
+// d3 forces expose chainable config methods the ForceFn type doesn't surface.
+interface ForceLike {
+  (alpha: number): void;
+  strength?: (v: number) => ForceLike;
+  distance?: (v: number) => ForceLike;
+}
+
 export class GalaxyView extends ItemView {
   constructor(leaf: WorkspaceLeaf, private plugin: GalaxyPluginLike) {
     super(leaf);
   }
 
-  private graph: any = null;
+  private graph: GalaxyGraph | null = null;
   private graphData: { nodes: GNode[]; links: GLink[] } = { nodes: [], links: [] };
   private fullGraphData: { nodes: GNode[]; links: GLink[] } = { nodes: [], links: [] };
   private highlightNodes = new Set<string>();
@@ -82,7 +95,7 @@ export class GalaxyView extends ItemView {
 
   // Populated once the lazily-loaded three.js / 3d-force-graph modules resolve (see onOpen).
   private THREE: typeof import("three") | null = null;
-  private ForceGraph3DFactory: ((opts: { controlType: string }) => (el: HTMLElement) => any) | null = null;
+  private ForceGraph3DCtor: GalaxyGraphCtor | null = null;
   private FogManagerCtor: (new (scene: THREE.Scene) => FogManager) | null = null;
   private sphereGridMod: typeof import("./scene/SphereGrid") | null = null;
 
@@ -101,7 +114,7 @@ export class GalaxyView extends ItemView {
       import("./scene/SphereGrid"),
     ]);
 
-    const style = getComputedStyle(document.body);
+    const style = activeWindow.getComputedStyle(activeDocument.body);
     const cssVar = (v: string, fb: string) => style.getPropertyValue(v).trim() || fb;
     this.themeAccent = cssVar("--interactive-accent", "#7c5cbf");
     this.themeBg = cssVar("--background-primary", "#000b1a");
@@ -207,7 +220,7 @@ export class GalaxyView extends ItemView {
       `${data.nodes.length} notes · ${data.links.length} links` +
       (orphanCount ? ` · ${orphanCount} orphans` : "");
 
-    this.registerDomEvent(document, "keydown", (evt: KeyboardEvent) => {
+    this.registerDomEvent(activeDocument, "keydown", (evt: KeyboardEvent) => {
       if (evt.key === "Escape" && this.selectedNode !== null) {
         evt.stopPropagation();
         evt.preventDefault();
@@ -218,8 +231,8 @@ export class GalaxyView extends ItemView {
     this.registerEvent(this.app.workspace.on("active-leaf-change", (leaf) => {
       this.tabVisible = leaf === this.leaf;
       if (this.graph) {
-        if (this.tabVisible) this.graph.resumeAnimation?.();
-        else this.graph.pauseAnimation?.();
+        if (this.tabVisible) this.graph.resumeAnimation();
+        else this.graph.pauseAnimation();
       }
     }));
 
@@ -229,16 +242,16 @@ export class GalaxyView extends ItemView {
 
     const [threeMod, forceGraphMod, fogManagerMod, sphereGridMod] = await depsPromise;
     this.THREE = threeMod;
-    this.ForceGraph3DFactory = (forceGraphMod as any).default as (opts: { controlType: string }) => (el: HTMLElement) => any;
+    this.ForceGraph3DCtor = forceGraphMod.default as GalaxyGraphCtor;
     this.FogManagerCtor = fogManagerMod.FogManager;
     this.sphereGridMod = sphereGridMod;
 
-    setTimeout(() => {
+    window.setTimeout(() => {
       this.initGraph();
-      this.graph?.d3AlphaDecay?.(0.02);
-      const renderer = this.graph?.renderer?.();
+      this.graph?.d3AlphaDecay(0.02);
+      const renderer = this.graph?.renderer();
       if (renderer) renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
-      const scene = this.graph?.scene?.() as THREE.Scene | null;
+      const scene = this.graph?.scene() ?? null;
       if (scene) {
         this.hudGroup = this.sphereGridMod!.buildHUDSphere(scene);
         this.fogManager = new this.FogManagerCtor!(scene);
@@ -249,9 +262,9 @@ export class GalaxyView extends ItemView {
       }
       this.startRotationLoop();
       this.attachResizeObserver();
-      setTimeout(() => {
+      window.setTimeout(() => {
         if (this.graph) {
-          const sceneNow = this.graph.scene?.() as THREE.Scene | null;
+          const sceneNow = this.graph.scene();
           if (sceneNow) {
             this.gridGroup = this.sphereGridMod!.buildGridSphere(sceneNow, this.graphData.nodes, this.gridGroup);
             this.updateGridOpacities();
@@ -267,7 +280,7 @@ export class GalaxyView extends ItemView {
     this.resizeObserver?.disconnect();
 
     if (this.rotationFrameId !== null) {
-      cancelAnimationFrame(this.rotationFrameId);
+      window.cancelAnimationFrame(this.rotationFrameId);
       this.rotationFrameId = null;
     }
 
@@ -277,7 +290,7 @@ export class GalaxyView extends ItemView {
     }
 
     if (this.spawnAnimationFrameId !== null) {
-      cancelAnimationFrame(this.spawnAnimationFrameId);
+      window.cancelAnimationFrame(this.spawnAnimationFrameId);
       this.spawnAnimationFrameId = null;
     }
 
@@ -285,7 +298,7 @@ export class GalaxyView extends ItemView {
     this.labelOverlayEl?.empty();
 
     if (this.graph) {
-      const scene = this.graph.scene?.() as THREE.Scene | null;
+      const scene = this.graph.scene() ?? null;
       this.sphereGridMod?.disposeGroup(scene, this.hudGroup);
       this.hudGroup = null;
       this.sphereGridMod?.disposeGroup(scene, this.gridGroup);
@@ -298,7 +311,7 @@ export class GalaxyView extends ItemView {
       }
       this.fogManager?.dispose();
       this.fogManager = null;
-      try { this.graph.pauseAnimation(); } catch (_) { }
+      try { this.graph.pauseAnimation(); } catch { /* renderer already torn down */ }
       this.graph = null;
     }
   }
@@ -312,8 +325,8 @@ export class GalaxyView extends ItemView {
     const hlLinks = this.highlightLinks;
     const accent = this.themeAccent;
 
-    const createGraph = this.ForceGraph3DFactory!;
-    this.graph = createGraph({ controlType: "orbit" })(this.graphContainer)
+    const GraphCtor = this.ForceGraph3DCtor!;
+    this.graph = new GraphCtor(this.graphContainer, { controlType: "orbit" })
       .width(w).height(h)
       .backgroundColor(this.themeBg)
       .graphData(this.graphData)
@@ -360,7 +373,7 @@ export class GalaxyView extends ItemView {
     // both are setTimeout-based, so their relative firing order is preserved even if the main
     // thread is busy for a while, unlike the original setTimeout-vs-requestAnimationFrame race.
     this.graph.pauseAnimation();
-    setTimeout(() => this.graph?.resumeAnimation(), 50);
+    window.setTimeout(() => this.graph?.resumeAnimation(), 50);
 
     this.refreshForces();
     this.graph.cameraPosition({ x: 0, y: 0, z: 1400 });
@@ -370,7 +383,7 @@ export class GalaxyView extends ItemView {
     let lastMs = performance.now();
 
     const tick = (nowMs: number) => {
-      this.rotationFrameId = requestAnimationFrame(tick);
+      this.rotationFrameId = window.requestAnimationFrame(tick);
 
       if (!this.graph || !this.tabVisible) {
         lastMs = nowMs;
@@ -381,11 +394,11 @@ export class GalaxyView extends ItemView {
       lastMs = nowMs;
 
       if (this.autoRotating && !this.isDragging) {
-        const camera = this.graph.camera() as THREE.PerspectiveCamera;
-        const controls = this.graph.controls() as any;
+        const camera = this.graph.camera();
+        const controls = this.graph.controls() as { target?: { x?: number; z?: number } } | null;
         if (camera && controls) {
-          const tx = (controls.target?.x ?? 0) as number;
-          const tz = (controls.target?.z ?? 0) as number;
+          const tx = controls.target?.x ?? 0;
+          const tz = controls.target?.z ?? 0;
           const dx = camera.position.x - tx;
           const dz = camera.position.z - tz;
           const rad = (this.plugin.settings.rotationSpeed / 0.001) * ROT_RAD_PER_MS * dt;
@@ -399,7 +412,7 @@ export class GalaxyView extends ItemView {
       this.updateLabelOverlay();
     };
 
-    this.rotationFrameId = requestAnimationFrame(tick);
+    this.rotationFrameId = window.requestAnimationFrame(tick);
   }
 
   private toggleRotation() {
@@ -442,13 +455,13 @@ export class GalaxyView extends ItemView {
     this.timelineDateEl?.addClass("is-visible");
 
     // Cinematic forces for timeline — restored to user settings when timeline ends
-    this.graph.d3Force("charge")?.strength?.(-120);
-    this.graph.d3Force("link")?.strength?.(0.25).distance?.(50);
-    this.graph.d3AlphaDecay?.(0.06);
-    this.graph.d3VelocityDecay?.(0.3);
+    (this.graph.d3Force("charge") as ForceLike | undefined)?.strength?.(-120);
+    (this.graph.d3Force("link") as ForceLike | undefined)?.strength?.(0.25).distance?.(50);
+    this.graph.d3AlphaDecay(0.06);
+    this.graph.d3VelocityDecay(0.3);
     // Soft boundary: no gravity inside 350 units, increasing pull beyond that
     const BOUND_RADIUS = 650;
-    this.graph.d3Force("center-gravity", ((alpha: number) => {
+    this.graph.d3Force("center-gravity", (alpha: number) => {
       for (const node of this.graphData.nodes as Array<GNode & { vx?: number; vy?: number; vz?: number }>) {
         const x = node.x ?? 0;
         const y = node.y ?? 0;
@@ -462,7 +475,7 @@ export class GalaxyView extends ItemView {
         node.vy = (node.vy ?? 0) - y * strength;
         node.vz = (node.vz ?? 0) - z * strength;
       }
-    }) as any);
+    });
 
     const candidateNodes = this.showOrphans
       ? this.fullGraphData.nodes
@@ -525,7 +538,6 @@ export class GalaxyView extends ItemView {
       (n as GNode & { vx?: number; vy?: number; vz?: number }).vz = 0;
       this.timelineVisibleSet.add(n.id);
       this.startSpawnAnimation(n);
-      const batch = [n];
 
       if (this.timelineDateEl) {
         const d = new Date(this.getTimelineTimestamp(n));
@@ -538,8 +550,8 @@ export class GalaxyView extends ItemView {
       });
 
       this.graphData = { nodes: visibleNodes, links: visibleLinks };
+      // graphData() re-heats the simulation on its own, so no explicit alpha kick is needed
       this.graph?.graphData(this.graphData);
-      this.graph?.d3Alpha?.(0.15);
       this.rebuildFog();
       this.rebuildLabels();
 
@@ -568,8 +580,8 @@ export class GalaxyView extends ItemView {
       this.timelineDateEl.textContent = "";
     }
 
-    this.graph?.d3AlphaDecay?.(0.02);
-    this.graph?.d3VelocityDecay?.(0.3);
+    this.graph?.d3AlphaDecay(0.02);
+    this.graph?.d3VelocityDecay(0.3);
     this.refreshForces();
 
     if (!keepState) {
@@ -588,7 +600,7 @@ export class GalaxyView extends ItemView {
     if (!(file instanceof TFile)) return 0;
 
     const cache = this.app.metadataCache.getFileCache(file);
-    const rawDate = cache?.frontmatter?.date;
+    const rawDate: unknown = cache?.frontmatter?.date;
     if (rawDate) {
       const parsed = new Date(String(rawDate));
       if (!isNaN(parsed.getTime())) return parsed.getTime();
@@ -614,21 +626,21 @@ export class GalaxyView extends ItemView {
   private refreshForces() {
     if (!this.graph) return;
     const s = this.plugin.settings;
-    const charge = this.graph.d3Force("charge");
+    const charge = this.graph.d3Force("charge") as ForceLike | undefined;
     if (charge?.strength) charge.strength(s.repelForce);
-    const link = this.graph.d3Force("link");
+    const link = this.graph.d3Force("link") as ForceLike | undefined;
     if (link) {
       if (link.strength) link.strength(s.linkForce);
       if (link.distance) link.distance(s.linkDistance);
     }
     this.applyRadialForce();
-    this.graph.d3ReheatSimulation?.();
+    this.graph.d3ReheatSimulation();
   }
 
   private applyRadialForce() {
     if (!this.graph) return;
     const s = this.plugin.settings;
-    this.graph.d3Force("center-gravity", ((alpha: number) => {
+    this.graph.d3Force("center-gravity", (alpha: number) => {
       for (const node of this.graphData.nodes as Array<GNode & { vx?: number; vy?: number; vz?: number }>) {
         const x = node.x ?? 0;
         const y = node.y ?? 0;
@@ -641,7 +653,7 @@ export class GalaxyView extends ItemView {
         node.vy = (node.vy ?? 0) - y * strength;
         node.vz = (node.vz ?? 0) - z * strength;
       }
-    }) as any);
+    });
   }
 
   private getSpawnPosition(node: GNode, nodeById: Map<string, GNode>) {
@@ -705,13 +717,13 @@ export class GalaxyView extends ItemView {
       this.graph?.nodeVal(this.graph.nodeVal());
 
       if (hasActive || this.spawnAnimations.size > 0) {
-        this.spawnAnimationFrameId = requestAnimationFrame(step);
+        this.spawnAnimationFrameId = window.requestAnimationFrame(step);
       } else {
         this.spawnAnimationFrameId = null;
       }
     };
 
-    this.spawnAnimationFrameId = requestAnimationFrame(step);
+    this.spawnAnimationFrameId = window.requestAnimationFrame(step);
   }
 
   private getAnimatedNodeVal(node: GNode) {
@@ -727,8 +739,8 @@ export class GalaxyView extends ItemView {
     this.labelOverlayEl.empty();
     if (!this.topLabelNodes.length) return;
 
-    const camera = this.graph.camera() as THREE.PerspectiveCamera | null;
-    const renderer = this.graph.renderer?.() as THREE.WebGLRenderer | null;
+    const camera = this.graph.camera();
+    const renderer = this.graph.renderer();
     if (!camera || !renderer) return;
 
     if (camera.position.length() > this.plugin.settings.labelHideDistance) return;
@@ -772,7 +784,7 @@ export class GalaxyView extends ItemView {
   }
 
   private toggleStars(enabled: boolean) {
-    const scene = this.graph?.scene?.() as THREE.Scene | null;
+    const scene = this.graph?.scene() ?? null;
     if (!scene || !this.sphereGridMod) return;
     if (enabled && !this.starsObject) {
       const s = this.plugin.settings;
@@ -853,7 +865,7 @@ export class GalaxyView extends ItemView {
   private flyToNode(node: GNode, dist: number, duration: number) {
     const { x = 0, y = 0, z = 0 } = node;
     if (!this.graph) return;
-    const camera = this.graph.camera() as THREE.PerspectiveCamera;
+    const camera = this.graph.camera();
     const dx = camera.position.x - x;
     const dy = camera.position.y - y;
     const dz = camera.position.z - z;
@@ -898,7 +910,7 @@ export class GalaxyView extends ItemView {
   private flashSaved() {
     if (!this.savedEl) return;
     this.savedEl.addClass("is-visible");
-    setTimeout(() => this.savedEl?.removeClass("is-visible"), 1500);
+    window.setTimeout(() => this.savedEl?.removeClass("is-visible"), 1500);
   }
 
   private recomputeActivityHeat() {

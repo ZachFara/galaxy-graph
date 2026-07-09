@@ -1,6 +1,22 @@
 # Changelog
 
-## [1.0.0] — Performance & Public Release (current)
+## [1.0.1] — Store Review Fixes (current)
+
+### Fixed
+- **Popout window compatibility** — all DOM/timer calls (`document`, `setTimeout`, `requestAnimationFrame`) now use the window-scoped forms (`activeDocument`, `window.setTimeout`, `window.requestAnimationFrame`) so the view behaves correctly when dragged into an Obsidian popout window
+- **Unhandled promises** — `revealLeaf`, note preview loading, and `openFile` calls are now properly awaited or explicitly marked fire-and-forget
+- **Frontmatter `tags:` as a plain string crashed graph building** — tag collection now normalizes scalar frontmatter values into arrays before mapping
+
+### Changed
+- `minAppVersion` raised to **1.7.2** (the `revealLeaf` async signature this plugin relies on was introduced there)
+- The 3d-force-graph instance is now fully typed (`ForceGraph3DInstance<GNode, GLink>`) instead of `any`, along with typed d3 force accessors and three.js scene-object disposal helpers
+- `three` promoted to a direct dependency (it is imported directly, not just transitively)
+- Replaced the `builtin-modules` package with Node's built-in `node:module` `builtinModules` list in the build config
+- Releases are now built and published from GitHub Actions with artifact attestations, so release assets carry verifiable build provenance
+
+---
+
+## [1.0.0] — Performance & Public Release
 
 ### Fixed
 - **Slow startup (5-10s)** — production builds were shipping unminified (`main.js` 3.29MB); esbuild now minifies production output, cutting bundle size to ~1.41MB

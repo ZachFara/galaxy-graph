@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import type { GNode } from "../types";
+import { disposeObject3D } from "./dispose";
 
 const HUD_COLOR = 0x5577bb;
 
@@ -69,11 +70,7 @@ export function buildHUDSphere(scene: THREE.Scene): THREE.Group {
 export function buildGridSphere(scene: THREE.Scene, nodes: GNode[], existingGroup: THREE.Group | null): THREE.Group | null {
   if (existingGroup) {
     scene.remove(existingGroup);
-    existingGroup.traverse((obj: any) => {
-      obj.geometry?.dispose();
-      if (Array.isArray(obj.material)) obj.material.forEach((m: any) => m.dispose());
-      else obj.material?.dispose();
-    });
+    existingGroup.traverse(disposeObject3D);
   }
 
   const GC = 0x8ab4f8;
@@ -130,7 +127,7 @@ export function buildGridSphere(scene: THREE.Scene, nodes: GNode[], existingGrou
   const gridSize = bRadius * 2.2;
   const grid = new THREE.GridHelper(gridSize, 20, 0x1a2a3a, 0x1a2a3a);
   const mats = Array.isArray(grid.material) ? grid.material : [grid.material];
-  mats.forEach((m: any) => { m.opacity = 0.15; m.transparent = true; });
+  mats.forEach((m) => { m.opacity = 0.15; m.transparent = true; });
   grid.position.set(center.x, bbox.min.y, center.z);
   group.add(grid);
 
@@ -149,8 +146,8 @@ export function updateGridSphereOpacities(
     if (obj instanceof THREE.GridHelper) {
       const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
       mats.forEach((m) => {
-        (m as THREE.Material & { opacity: number; transparent: boolean }).opacity = groundGridOpacity;
-        (m as THREE.Material & { opacity: number; transparent: boolean }).transparent = true;
+        m.opacity = groundGridOpacity;
+        m.transparent = true;
       });
     } else if (obj instanceof THREE.LineSegments) {
       const mat = obj.material as THREE.LineBasicMaterial;
@@ -217,9 +214,5 @@ export function buildStarfield(scene: THREE.Scene, boundingRadius: number, starC
 export function disposeGroup(scene: THREE.Scene | null, group: THREE.Group | null) {
   if (!scene || !group) return;
   scene.remove(group);
-  group.traverse((obj: any) => {
-    obj.geometry?.dispose();
-    if (Array.isArray(obj.material)) obj.material.forEach((m: any) => m.dispose());
-    else obj.material?.dispose();
-  });
+  group.traverse(disposeObject3D);
 }

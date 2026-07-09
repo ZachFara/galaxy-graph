@@ -10,7 +10,7 @@ export interface InspectorPanelActions {
   clearHighlight(): void;
   refreshGraphData(): { nodes: GNode[]; links: GLink[] };
   updateGraphData(data: { nodes: GNode[]; links: GLink[] }): void;
-  graphInstance(): any;
+  graphInstance(): { graphData(data: { nodes: GNode[]; links: GLink[] }): unknown } | null;
   rebuildFog(): void;
   rebuildLabels(): void;
 }
@@ -65,7 +65,7 @@ export class InspectorPanel {
 
     const preview = panel.createDiv({ cls: "galaxy-inspector-preview" });
     preview.textContent = "Loading preview…";
-    this.loadPreview(node.filePath).then((previewText) => {
+    void this.loadPreview(node.filePath).then((previewText) => {
       preview.textContent = previewText || "(empty)";
       if (!previewText) preview.addClass("is-plain");
     });
@@ -73,7 +73,7 @@ export class InspectorPanel {
     const openBtn = panel.createEl("button", { text: "Open note →", cls: "galaxy-open-btn" });
     openBtn.onclick = () => {
       const file = this.app.vault.getAbstractFileByPath(node.filePath);
-      if (file instanceof TFile) this.app.workspace.getLeaf("tab").openFile(file);
+      if (file instanceof TFile) void this.app.workspace.getLeaf("tab").openFile(file);
     };
 
     const truncTitle = node.name.length > 20 ? node.name.slice(0, 20) + "…" : node.name;
@@ -83,7 +83,6 @@ export class InspectorPanel {
         const folderPath = node.filePath.includes("/") ? node.filePath.substring(0, node.filePath.lastIndexOf("/")) : "";
         const now = new Date();
         const timestamp = now.toISOString().slice(0, 10);
-        const time = now.toTimeString().slice(0, 5);
         const baseName = `Untitled ${timestamp}`;
         let newFileName = folderPath ? `${folderPath}/${baseName}.md` : `${baseName}.md`;
         let suffix = 2;
@@ -94,7 +93,7 @@ export class InspectorPanel {
         const tpl = this.getSettings().noteTemplate;
         const content = tpl
           .replace(/\{\{date\}\}/g, timestamp)
-          .replace(/\{\{index\}\}/g, node.name.replace(/[\[\]]/g, ""))
+          .replace(/\{\{index\}\}/g, node.name.replace(/[[\]]/g, ""))
           .replace(/\{\{title\}\}/g, "Untitled")
           .replace(/\{\{folder\}\}/g, folderPath || "vault root");
         const newFile = await this.app.vault.create(newFileName, content);
@@ -167,18 +166,18 @@ export class InspectorPanel {
     indexName: string;
   } {
     const constellationDates: Date[] = [];
-    const clickedIndexName = node.name.replace(/[\[\]]/g, "");
+    const clickedIndexName = node.name.replace(/[[\]]/g, "");
 
     for (const file of this.app.vault.getMarkdownFiles()) {
       const cache = this.app.metadataCache.getFileCache(file);
-      const frontmatterLinks = cache?.frontmatter?.links ?? [];
-      const linksArray = Array.isArray(frontmatterLinks) ? frontmatterLinks : [frontmatterLinks];
+      const frontmatterLinks: unknown = cache?.frontmatter?.links ?? [];
+      const linksArray: unknown[] = Array.isArray(frontmatterLinks) ? frontmatterLinks : [frontmatterLinks];
 
       for (const link of linksArray) {
-        const clean = String(link).replace(/[\[\]]/g, "").split("|")[0].trim();
+        const clean = String(link).replace(/[[\]]/g, "").split("|")[0].trim();
         if (clean !== clickedIndexName) continue;
 
-        const rawDate = cache?.frontmatter?.date;
+        const rawDate: unknown = cache?.frontmatter?.date;
         const parsedDate = rawDate ? new Date(String(rawDate)) : new Date(file.stat.ctime);
         constellationDates.push(isNaN(parsedDate.getTime()) ? new Date(file.stat.ctime) : parsedDate);
         break;
@@ -263,13 +262,13 @@ export class InspectorPanel {
     const barWidth = Math.max(3, step - 2);
     const color = getNodeColor(node, this.getSettings());
 
-    const svg = document.createElementNS(NS, "svg");
+    const svg = activeDocument.createElementNS(NS, "svg");
     svg.setAttribute("width", `${width}`);
     svg.setAttribute("height", `${height}`);
     svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
     svg.setAttribute("class", "galaxy-svg");
 
-    const axis = document.createElementNS(NS, "line");
+    const axis = activeDocument.createElementNS(NS, "line");
     axis.setAttribute("x1", `${padLeft}`);
     axis.setAttribute("y1", `${padTop + plotHeight}`);
     axis.setAttribute("x2", `${width - padRight}`);
@@ -284,7 +283,7 @@ export class InspectorPanel {
       const x = padLeft + i * step + (step - barWidth) / 2;
       const barHeight = (count / maxMonthly) * plotHeight;
       const y = padTop + plotHeight - barHeight;
-      const bar = document.createElementNS(NS, "rect");
+      const bar = activeDocument.createElementNS(NS, "rect");
       bar.setAttribute("x", `${x}`);
       bar.setAttribute("y", `${y}`);
       bar.setAttribute("width", `${barWidth}`);
@@ -299,7 +298,7 @@ export class InspectorPanel {
       linePoints.push(`${lineX},${lineY}`);
     });
 
-    const line = document.createElementNS(NS, "polyline");
+    const line = activeDocument.createElementNS(NS, "polyline");
     line.setAttribute("points", linePoints.join(" "));
     line.setAttribute("fill", "none");
     line.setAttribute("stroke", "currentColor");
@@ -311,7 +310,7 @@ export class InspectorPanel {
     data.cumulative.forEach((value, i) => {
       const cx = padLeft + i * step + step / 2;
       const cy = padTop + plotHeight - (value / maxCumulative) * plotHeight;
-      const dot = document.createElementNS(NS, "circle");
+      const dot = activeDocument.createElementNS(NS, "circle");
       dot.setAttribute("cx", `${cx}`);
       dot.setAttribute("cy", `${cy}`);
       dot.setAttribute("r", "1.8");
@@ -323,7 +322,7 @@ export class InspectorPanel {
     data.labels.forEach((label, i) => {
       if (i !== 0 && i !== data.labels.length - 1 && i % quarterStep !== 0) return;
       const x = padLeft + i * step + step / 2;
-      const text = document.createElementNS(NS, "text");
+      const text = activeDocument.createElementNS(NS, "text");
       text.textContent = label.split(" ")[0];
       text.setAttribute("x", `${x}`);
       text.setAttribute("y", `${height - 6}`);
@@ -381,7 +380,7 @@ export class InspectorPanel {
     const W = 200, H = 200, CX = 100, CY = 100, R = 70;
     const NS = "http://www.w3.org/2000/svg";
 
-    const svg = document.createElementNS(NS, "svg");
+    const svg = activeDocument.createElementNS(NS, "svg");
     svg.setAttribute("width", `${W}`);
     svg.setAttribute("height", `${H}`);
     svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
@@ -403,7 +402,7 @@ export class InspectorPanel {
       const sp = positions.get(src);
       const tp = positions.get(tgt);
       if (!sp || !tp) continue;
-      const line = document.createElementNS(NS, "line");
+      const line = activeDocument.createElementNS(NS, "line");
       line.setAttribute("x1", `${sp.x}`);
       line.setAttribute("y1", `${sp.y}`);
       line.setAttribute("x2", `${tp.x}`);
@@ -421,7 +420,7 @@ export class InspectorPanel {
       const r = isCenter ? 8 : Math.max(3, Math.min(7, 3 + Math.sqrt(n.val)));
       const color = getNodeColor(n, this.getSettings());
 
-      const glow = document.createElementNS(NS, "circle");
+      const glow = activeDocument.createElementNS(NS, "circle");
       glow.setAttribute("cx", `${pos.x}`);
       glow.setAttribute("cy", `${pos.y}`);
       glow.setAttribute("r", `${r + 3}`);
@@ -429,7 +428,7 @@ export class InspectorPanel {
       glow.setAttribute("fill-opacity", "0.12");
       svg.appendChild(glow);
 
-      const circle = document.createElementNS(NS, "circle");
+      const circle = activeDocument.createElementNS(NS, "circle");
       circle.setAttribute("cx", `${pos.x}`);
       circle.setAttribute("cy", `${pos.y}`);
       circle.setAttribute("r", `${r}`);
@@ -445,7 +444,7 @@ export class InspectorPanel {
       svg.appendChild(circle);
 
       if (!isCenter) {
-        const svgText = document.createElementNS(NS, "text");
+        const svgText = activeDocument.createElementNS(NS, "text");
         const trimmed = n.name.length > 9 ? n.name.slice(0, 9) + "…" : n.name;
         svgText.textContent = trimmed;
         svgText.setAttribute("x", `${pos.x}`);

@@ -1,6 +1,6 @@
 {
   "name": "obsidian-galaxy-graph",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "3D force-directed galaxy graph for Obsidian",
   "main": "main.js",
   "scripts": {
@@ -21,11 +21,11 @@
   },
   "homepage": "https://github.com/ZachFara/galaxy-graph#readme",
   "dependencies": {
-    "3d-force-graph": "^1.73.5"
+    "3d-force-graph": "^1.73.5",
+    "three": "^0.184.0"
   },
   "devDependencies": {
     "@types/node": "^16.18.0",
-    "builtin-modules": "^3.3.0",
     "esbuild": "^0.20.0",
     "obsidian": "latest",
     "tslib": "^2.6.0",

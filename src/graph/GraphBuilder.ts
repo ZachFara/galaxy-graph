@@ -60,6 +60,8 @@ export function buildGraphData(app: App): { nodes: GNode[]; links: GLink[] } {
     const inp = inDeg.get(f.path) ?? 0;
     const deg = out + inp;
     const folder = topLevelKey(f.path);
+    const rawTags: unknown = metadataCache.getFileCache(f)?.frontmatter?.tags ?? [];
+    const tagList: unknown[] = Array.isArray(rawTags) ? rawTags : [rawTags];
     return {
       id: f.path,
       name: f.basename,
@@ -71,7 +73,7 @@ export function buildGraphData(app: App): { nodes: GNode[]; links: GLink[] } {
       degree: deg,
       outDegree: out,
       inDegree: inp,
-      tags: ((metadataCache.getFileCache(f)?.frontmatter?.tags ?? []) as any[]).map((t: any) => String(t).replace(/^#/, "")),
+      tags: tagList.map((t) => String(t).replace(/^#/, "")),
     };
   });
 
