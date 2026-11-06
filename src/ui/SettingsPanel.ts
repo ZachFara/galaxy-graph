@@ -1,5 +1,6 @@
 import { getAllTags, setIcon, type App } from "obsidian";
 import { DEFAULT_SETTINGS, type GalaxySettings } from "../settings";
+import { visibleMarkdownFiles } from "../utils/excluded";
 
 export interface SettingsPanelPlugin {
   settings: GalaxySettings;
@@ -152,7 +153,7 @@ export function buildSettingsPanel(
 
 function collectVaultTags(app: App): string[] {
   const tagSet = new Set<string>();
-  for (const file of app.vault.getMarkdownFiles()) {
+  for (const file of visibleMarkdownFiles(app)) {
     const cache = app.metadataCache.getFileCache(file);
     if (!cache) continue;
     for (const t of getAllTags(cache) ?? []) tagSet.add(t.replace(/^#/, ""));
