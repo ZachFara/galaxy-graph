@@ -18,10 +18,6 @@ const MAX_CLOUD_FRACTION = 0.35;
 const LIGHT_OPACITY_FACTOR = 0.75;
 const LIGHT_INK_MIX = 0.2;
 const UNFOCUSED_CLOUD_FACTOR = 0.4;
-// A cloud dissolves as the camera comes within a few cloud radii: once you are inside the
-// weather it stops tinting everything.
-const DISSOLVE_NEAR = 1.0;
-const DISSOLVE_FAR = 2.5;
 const NODE_REL_SIZE = 5;
 
 interface Positioned extends GNode {
@@ -38,7 +34,6 @@ export class FogManager {
   readonly fogNodeMap = new Map<string, THREE.Sprite>();
   private baseOpacity = 0;
   private focusedHubId: string | null = null;
-  private cameraPosition = new THREE.Vector3(0, 0, Number.POSITIVE_INFINITY);
 
   constructor(private scene: THREE.Scene) {}
 
@@ -143,20 +138,10 @@ export class FogManager {
     this.applyFocus();
   }
 
-  /** Called every frame: clouds near the camera dissolve. */
-  updateCamera(position: THREE.Vector3) {
-    this.cameraPosition.copy(position);
-    this.applyFocus();
-  }
-
   private applyFocus() {
     for (const [id, sprite] of this.fogNodeMap) {
       const recede = this.focusedHubId !== null && id !== this.focusedHubId;
-      const radius = sprite.scale.x / 2;
-      const distance = sprite.position.distanceTo(this.cameraPosition) / Math.max(radius, 1);
-      const t = Math.max(0, Math.min(1, (distance - DISSOLVE_NEAR) / (DISSOLVE_FAR - DISSOLVE_NEAR)));
-      const proximity = t * t * (3 - 2 * t);
-      sprite.material.opacity = this.baseOpacity * (recede ? UNFOCUSED_CLOUD_FACTOR : 1) * proximity;
+      sprite.material.opacity = this.baseOpacity * (recede ? UNFOCUSED_CLOUD_FACTOR : 1);
     }
   }
 

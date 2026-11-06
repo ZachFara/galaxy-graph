@@ -36,22 +36,6 @@ imagery to stay a justification for atmosphere, not a theme.
   nearby notes when their sphere projects ≥ 7 px; clickable.
 - **Chrome** uses Obsidian's variables, type scale and native controls; one accent per panel.
 
-## Addendum (same day): the close-up
-
-Zoomed into a neighbourhood the first cut collapsed into one flat hue: hub, neighbours, links
-and cloud all the same colour, shaded spheres reading as plastic balls, everything else grey.
-Two renderings were built and compared on screen (shaded spheres vs. flat sprites; a glow
-halo and a selection ring were tried and rejected as ugly). Decided:
-
-- Notes are flat soft-edged discs (sprites), no glow. Tone varies by degree toward the ink.
-- Scene fog density also follows the camera (0.25 / camera distance), and a cloud dissolves
-  as the camera comes within 1–2.5 of its radii.
-- Dimmed notes keep their own colour at 20% instead of turning ink-grey.
-- The orbit controls' minimum distance is ten radii of the largest hub.
-- Default highlighted-link opacity dropped from 0.9 to 0.55.
-- The spawn animation resizes tracked sprites in place; the whole node set is rebuilt only
-  on selection, theme or colour-mode changes.
-
 ## Consequences
 
 - The plugin has no "look" of its own beyond the folder palettes; it inherits the user's

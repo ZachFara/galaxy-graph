@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_SETTINGS, type GalaxySettings } from "../../src/settings";
 import type { GNode } from "../../src/types";
-import { getNodeColor, heatColor, toneByDegree } from "../../src/utils/colors";
+import { dimNodeColor, getNodeColor, heatColor } from "../../src/utils/colors";
 
 const node = (overrides: Partial<GNode> = {}): GNode => ({
   id: "a.md",
@@ -47,12 +47,8 @@ describe("getNodeColor", () => {
 });
 
 describe("other colours", () => {
-  it("tones leaves toward the ink and leaves hubs vivid", () => {
-    expect(toneByDegree("#ff0000", 200, 200, "#ffffff")).toBe("#ff0000");
-    expect(toneByDegree("#ff0000", 0, 200, "#ffffff")).toBe("#ff5959");
-    const leaf = toneByDegree("#ff0000", 1, 200, "#ffffff");
-    const sub = toneByDegree("#ff0000", 20, 200, "#ffffff");
-    expect(parseInt(leaf.slice(3, 5), 16)).toBeGreaterThan(parseInt(sub.slice(3, 5), 16));
+  it("dims with the ink colour at low alpha", () => {
+    expect(dimNodeColor("#ffffff")).toBe("rgba(255,255,255,0.12)");
   });
   it("ramps heat from cool to warm", () => {
     expect(heatColor(0, 0, 10)).toBe("#4fc3f7");
