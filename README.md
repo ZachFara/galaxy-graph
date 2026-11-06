@@ -30,9 +30,13 @@ The canvas takes its colours from your Obsidian theme, light or dark:
 
 ## Installation
 
-Not yet on the Community Plugins store. Either download `main.js`, `manifest.json` and
-`styles.css` from the [latest release](https://github.com/ZachFara/galaxy-graph/releases/latest),
-or build from source:
+In Obsidian, open Settings → Community plugins → Browse, search for **Galaxy Graph**, then
+install and enable it. The listing is at
+[community.obsidian.md/plugins/galaxy-graph](https://community.obsidian.md/plugins/galaxy-graph).
+
+To install by hand instead, download `main.js`, `manifest.json` and `styles.css` from the
+[latest release](https://github.com/ZachFara/galaxy-graph/releases/latest) into
+`<YourVault>/.obsidian/plugins/galaxy-graph/` and enable the plugin. To build from source:
 
 ```bash
 git clone https://github.com/ZachFara/galaxy-graph.git
@@ -40,15 +44,6 @@ cd galaxy-graph
 npm ci
 npm run build
 ```
-
-Then copy the three files into a folder in your vault and enable the plugin:
-
-```bash
-mkdir -p "<YourVault>/.obsidian/plugins/galaxy-graph"
-cp main.js manifest.json styles.css "<YourVault>/.obsidian/plugins/galaxy-graph/"
-```
-
-Settings → Community plugins → toggle **Galaxy Graph** on.
 
 ## Usage
 
