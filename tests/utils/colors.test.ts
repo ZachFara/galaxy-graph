@@ -54,6 +54,9 @@ describe("other colours", () => {
     const sub = toneByDegree("#ff0000", 20, 200, "#ffffff");
     expect(parseInt(leaf.slice(3, 5), 16)).toBeGreaterThan(parseInt(sub.slice(3, 5), 16));
   });
+  it("applies no tone at zero strength", () => {
+    expect(toneByDegree("#ff0000", 0, 200, "#ffffff", 0)).toBe("#ff0000");
+  });
   it("ramps heat from cool to warm", () => {
     expect(heatColor(0, 0, 10)).toBe("#4fc3f7");
     expect(heatColor(10, 0, 10)).toBe("#ff5722");

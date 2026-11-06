@@ -37,10 +37,17 @@ function defaultNodeColor(isDark: boolean): string {
  * dark ground, deeper on a light one), on a log scale so sub-hubs still read as structure
  * inside a big cluster. Shifting toward the ink keeps leaves visible on either theme.
  */
-export function toneByDegree(color: string, degree: number, maxDegree: number, ink: string): string {
+export function toneByDegree(
+  color: string,
+  degree: number,
+  maxDegree: number,
+  ink: string,
+  strength = TONE_STRENGTH,
+): string {
+  if (strength <= 0) return color;
   const span = Math.log1p(Math.max(1, maxDegree));
   const t = 1 - Math.min(1, Math.log1p(Math.max(0, degree)) / span);
-  return mix(color, ink, TONE_STRENGTH * t);
+  return mix(color, ink, strength * t);
 }
 
 /** Cool-to-warm ramp by degree, used for the cloud heat mode. */
