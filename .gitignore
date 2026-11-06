@@ -11,3 +11,7 @@ assets/standard_demonstration.mp4
 assets/over_time_demonstration.mp4
 /galaxy_graph_image.png
 /local_galaxy.png
+
+# agent/session workspace: throwaway scripts, experiments, notes
+.scratch/
+coverage/

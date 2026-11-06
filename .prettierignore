@@ -1,0 +1,6 @@
+main.js
+node_modules/
+.scratch/
+package-lock.json
+CHANGELOG.md
+assets/

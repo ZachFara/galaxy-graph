@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Runs the same single check command as CI. Never add a bypass flag here.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+exec make check
