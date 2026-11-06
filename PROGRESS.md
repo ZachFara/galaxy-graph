@@ -34,33 +34,23 @@ unless told otherwise. Mark done with the PR number.
 
 ## Open Questions
 
-Owner decisions needed. Do not guess on these.
+None open. Decisions taken by the owner on 2026-11-06 ("do all your recommendations"):
 
-- **Q1 — Remotes and history.** The local clone has two remotes: `origin` → private
-  `ZachFara/Galaxy_Graphs` (`master`, old history, `node_modules` committed) and
-  `newrepo` → public `ZachFara/galaxy-graph` (`main`, clean 7-commit history, the one
-  releases ship from). Recommendation: rename `newrepo` to `origin`, rename the old one
-  to `archive`, create a local `main` tracking the public repo, and archive the private
-  GitHub repo. The old `master` branch stays local as a reference until task 1 lands.
-- **Q2 — Keep `main.js` in git?** It is a 1.5 MB build artifact that changes on every
-  source edit and will make every PR diff noisy. The release workflow builds it fresh
-  and the README tells users to build or download it. Recommendation: stop tracking it
-  (task 11).
-- **Q3 — Branch protection approvals.** Protection on `main` requires a PR and a green
-  `check` status but **zero** approving reviews, because a solo maintainer cannot approve
-  their own PR. Confirm, or name a second reviewer account to require one approval.
-- **Q4 — Behaviour nuances from the setup PR's lint fixes.** (a) Frontmatter `date`
-  values that are numbers are now parsed (seconds or milliseconds) via `parseTimestamp`;
-  previously they fell back to file ctime. (b) Fog sprites for nodes without a position
-  yet are placed at the origin instead of at `NaN` until the next position sync. Both
-  look like improvements; confirm or ask for a revert.
-- **Q5 — Complexity ceilings.** The initial ceilings (complexity 20, max-params 7,
-  max-lines-per-function 550, max-lines 1000) were set so the existing code passes and
-  only ever go down (tasks 5–7). If you want different targets, say so before task 5.
+- **Q1 — Remotes and history: done.** Local remotes renamed: `origin` → public
+  `ZachFara/galaxy-graph` (`main`), `archive` → private `ZachFara/Galaxy_Graphs`, which
+  is now archived on GitHub (read-only). Local `main` tracks `origin/main`. The local
+  `master` branch stays as a reference for task 1 only.
+- **Q2 — `main.js` in git: stop tracking it.** Done in the stacked PR for task 11.
+- **Q3 — Branch protection: zero required approvals** (solo maintainer); PR and green
+  `check` status required, no force pushes or deletions, enforced for admins.
+- **Q4 — Behaviour nuances from the lint fixes: keep.** Numeric frontmatter dates now
+  parse via `parseTimestamp`; fog sprites without a position start at the origin.
+- **Q5 — Complexity ceilings: keep the ratchet** as recorded in decision 0003 and tasks
+  5–7.
 
 ## Next steps
 
-1. Owner reviews and merges the setup PR, answers Q1–Q5.
+1. Owner reviews and merges the setup PR (#1) and the stacked `main.js` PR.
 2. First Phase 2 session takes task 1 (it is user-visible and already written on the
    old branch; it also needs the first real unit tests).
 3. Task 2 next, because every later test task depends on it.
