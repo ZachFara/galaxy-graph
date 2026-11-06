@@ -121,13 +121,10 @@ The canvas is a nebula, not a space scene: the only atmosphere is the one the da
   darkened on light grounds. While a note is selected, every cloud but the selected hub's
   recedes to 40%, and any cloud dissolves as the camera comes within 1–2.5 cloud radii:
   once you are inside the weather it stops tinting everything.
-- **Nodes and links.** A note has two renderings chosen by "closeness" (0 at the whole-galaxy
-  framing distance, rising to 1 at a fifth of it): far out, a shaded sphere in its full
-  colour, which keeps the galaxy's bright dust; close in, a flat soft-edged disc facing the
-  camera. Never a glow. Radius = cbrt(degree) × 5. Within one hue, tone varies by degree on
-  a log scale scaled by closeness: hubs vivid, leaves shifted up to 35% toward the ink when
-  close, so a cluster reads as a population with structure on either theme while the galaxy
-  view is untouched. Links are lines in the ink colour
+- **Nodes and links.** A note is a flat, soft-edged disc facing the camera (a sprite), never
+  a shaded sphere and never a glow: radius = cbrt(degree) × 5. Within one hue, tone varies by
+  degree on a log scale: hubs vivid, leaves shifted up to 35% toward the ink, so a cluster
+  reads as a population with structure on either theme. Links are lines in the ink colour
   at the configured opacity. Selection keeps colours: the selected note grows 1.3× and
   brightens toward the ink, its links take its colour at the highlight opacity, everything
   else becomes a translucent ghost of its own colour (20%).

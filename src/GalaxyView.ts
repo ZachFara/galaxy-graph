@@ -8,7 +8,7 @@ import type { ForceGraph3DInstance } from "3d-force-graph";
 import { buildGraphData } from "./graph/GraphBuilder";
 import type { GalaxySettings } from "./settings";
 import type { FogManager } from "./scene/FogManager";
-import type { NodeSpriteFactory, NodeStyle } from "./scene/NodeSprites";
+import type { NodeSpriteFactory } from "./scene/NodeSprites";
 import { computeActivityHeat } from "./utils/activity";
 import type { GLink, GNode } from "./types";
 import { resolveId } from "./types";
@@ -51,14 +51,6 @@ const FOCUS_MIN_NODE_RADII = 6;
 const FOG_DENSITY_FACTOR = 0.18;
 // Fog also follows the camera: zooming into a neighbourhood fades the galaxy behind it.
 const FOG_CAMERA_FACTOR = 0.25;
-// "Closeness" runs from 0 at the whole-galaxy framing to 1 deep inside a neighbourhood.
-// Far out, notes are shaded spheres in their full colour (the galaxy's bright dust); as the
-// camera comes within NEAR_START of the framing distance they become flat discs and leaves
-// tone toward the ink, fully so at NEAR_FULL.
-const NEAR_START = 0.7;
-const NEAR_FULL = 0.2;
-const CLOSENESS_STEP = 0.05;
-const TONE_MAX = 0.35;
 // The selected note grows a little and brightens toward the ink; everything outside the
 // selection becomes a translucent ghost of its own colour.
 const SELECTED_SPRITE_SCALE = 1.3;
@@ -133,9 +125,6 @@ export class GalaxyView extends ItemView {
   private theme: CanvasTheme = { ground: "#1e1e1e", ink: "#dcddde", isDark: true };
   private sceneFog: THREE.FogExp2 | null = null;
   private galaxyFogDensity = FOG_DENSITY_FACTOR / INITIAL_GRAPH_RADIUS;
-  private bodyRadius = INITIAL_GRAPH_RADIUS;
-  private closeness = 0;
-  private nodeStyle: NodeStyle = "sphere";
   private maxDegree = 1;
   private nodeSprites: NodeSpriteFactory | null = null;
   private autoRotating = true;
@@ -464,7 +453,6 @@ export class GalaxyView extends ItemView {
   private updateSceneFog() {
     if (!this.sceneFog) return;
     const radius = Math.max(this.graphSphere()?.radius ?? 0, 200);
-    this.bodyRadius = radius;
     this.galaxyFogDensity = FOG_DENSITY_FACTOR / radius;
     this.sceneFog.density = this.galaxyFogDensity;
     this.sceneFog.color.set(this.theme.ground);
@@ -517,25 +505,6 @@ export class GalaxyView extends ItemView {
       this.sceneFog.density = Math.max(this.galaxyFogDensity, FOG_CAMERA_FACTOR / Math.max(camDist, 1));
     }
     this.fogManager?.updateCamera(camera.position);
-    this.updateCloseness(camDist);
-  }
-
-  /** Crossfades the notes between the far look and the near look as the camera moves. */
-  private updateCloseness(camDist: number) {
-    const frameDist = fitDistance(this.bodyRadius, this.cameraFov(), this.viewportAspect(), FRAME_FILL);
-    const raw = (NEAR_START * frameDist - camDist) / ((NEAR_START - NEAR_FULL) * frameDist);
-    const closeness = Math.round(Math.max(0, Math.min(1, raw)) / CLOSENESS_STEP) * CLOSENESS_STEP;
-    if (closeness === this.closeness) return;
-    this.closeness = closeness;
-    const style: NodeStyle = closeness > 0 ? "disc" : "sphere";
-    if (style !== this.nodeStyle) {
-      this.nodeStyle = style;
-      this.applyNodeStyle();
-      return;
-    }
-    const factory = this.nodeSprites;
-    if (!factory) return;
-    for (const n of this.graphData.nodes) factory.tint(n.id, this.displayColorFor(n));
   }
 
   private toggleRotation() {
@@ -1038,12 +1007,7 @@ export class GalaxyView extends ItemView {
 
   private ownColorFor(n: GNode): string {
     const base = getNodeColor(n, this.plugin.settings, this.theme.isDark);
-    return toneByDegree(base, n.degree, this.maxDegree, this.theme.ink, TONE_MAX * this.closeness);
-  }
-
-  private displayColorFor(n: GNode): string {
-    const own = this.ownColorFor(n);
-    return this.selectedNode?.id === n.id ? mix(own, this.theme.ink, SELECTED_TINT) : own;
+    return toneByDegree(base, n.degree, this.maxDegree, this.theme.ink);
   }
 
   private isDimmed(n: GNode): boolean {
@@ -1059,13 +1023,10 @@ export class GalaxyView extends ItemView {
       const isSelected = this.selectedNode?.id === n.id;
       const radius =
         nodeRadius(this.getAnimatedNodeVal(n), NODE_REL_SIZE) * (isSelected ? SELECTED_SPRITE_SCALE : 1);
-      return factory.make(
-        n.id,
-        this.displayColorFor(n),
-        radius,
-        this.isDimmed(n) ? DIMMED_OPACITY : 1,
-        this.nodeStyle,
-      );
+      const color = isSelected
+        ? mix(this.ownColorFor(n), this.theme.ink, SELECTED_TINT)
+        : this.ownColorFor(n);
+      return factory.make(n.id, color, radius, this.isDimmed(n) ? DIMMED_OPACITY : 1);
     });
   }
 

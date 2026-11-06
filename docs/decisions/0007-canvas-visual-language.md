@@ -43,11 +43,7 @@ and cloud all the same colour, shaded spheres reading as plastic balls, everythi
 Two renderings were built and compared on screen (shaded spheres vs. flat sprites; a glow
 halo and a selection ring were tried and rejected as ugly). Decided:
 
-- Notes are shaded spheres far out and flat soft-edged discs (sprites) close in, switched by
-  a camera-distance "closeness" with the tone toward the ink scaled by the same value, so the
-  galaxy view is exactly the pre-close-up look and only the neighbourhood view changes. (The
-  owner preferred the original zoomed-out look and the new close-up; this is the blend.) No
-  glow in either rendering.
+- Notes are flat soft-edged discs (sprites), no glow. Tone varies by degree toward the ink.
 - Scene fog density also follows the camera (0.25 / camera distance), and a cloud dissolves
   as the camera comes within 1–2.5 of its radii.
 - Dimmed notes keep their own colour at 20% instead of turning ink-grey.
