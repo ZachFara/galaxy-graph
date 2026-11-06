@@ -21,7 +21,6 @@ const ALLOWED_ROOT_FILES = new Set([
   "esbuild.config.mjs",
   "eslint.config.mjs",
   "knip.json",
-  "main.js",
   "main.ts",
   "manifest.json",
   "package-lock.json",

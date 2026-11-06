@@ -29,7 +29,7 @@ unless told otherwise. Mark done with the PR number.
 | 8   | **chore: enable `noUncheckedIndexedAccess`** (32 sites, mostly `colors.ts`, `InspectorPanel.ts`)                                                         | 3, 4       | Flag on in `tsconfig.json`; `make check` passes; no `!` assertions added                                                                                                        |
 | 9   | **chore: align release workflow with CI** — Node 22, `npm ci`, reuse `make check` before building release assets                                         | —          | `release.yml` runs `make check`; a dry run on a test tag in a fork or `act` is described in the PR                                                                              |
 | 10  | **docs: README refresh** — Node 22 requirement, contributor section pointing at AGENTS.md, current store status                                          | —          | README accurate; no dead links                                                                                                                                                  |
-| 11  | **chore: stop tracking `main.js`** (if Q2 is answered "yes")                                                                                             | Q2         | `main.js` gitignored, release assets unaffected, README install steps still correct                                                                                             |
+| 11  | **chore: stop tracking `main.js`** — done, stacked PR on top of the setup PR                                                                             | —          | `main.js` gitignored, release assets unaffected, README install steps still correct                                                                                             |
 | 12  | **release 1.0.2** — CHANGELOG, bump `manifest.json`/`package.json`/`versions.json`, tag                                                                  | 1, 9       | Release workflow green; assets attached                                                                                                                                         |
 
 ## Open Questions
@@ -40,7 +40,7 @@ None open. Decisions taken by the owner on 2026-11-06 ("do all your recommendati
   `ZachFara/galaxy-graph` (`main`), `archive` → private `ZachFara/Galaxy_Graphs`, which
   is now archived on GitHub (read-only). Local `main` tracks `origin/main`. The local
   `master` branch stays as a reference for task 1 only.
-- **Q2 — `main.js` in git: stop tracking it.** Done in the stacked PR for task 11.
+- **Q2 — `main.js` in git: stop tracking it.** Done (task 11, decision 0006).
 - **Q3 — Branch protection: zero required approvals** (solo maintainer); PR and green
   `check` status required, no force pushes or deletions, enforced for admins.
 - **Q4 — Behaviour nuances from the lint fixes: keep.** Numeric frontmatter dates now

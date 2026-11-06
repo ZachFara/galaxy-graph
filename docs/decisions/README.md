@@ -11,3 +11,4 @@ new record that supersedes the old one and link both ways; do not edit history.
 | 0003 | [One check command and ratcheting quality gates](0003-quality-gates.md)   |
 | 0004 | [Module boundaries](0004-module-boundaries.md)                            |
 | 0005 | [Canonical repository, branching and commits](0005-repo-and-branching.md) |
+| 0006 | [Build output is not tracked in git](0006-untracked-build-output.md)      |

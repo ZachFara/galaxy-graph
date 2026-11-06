@@ -31,6 +31,7 @@ docs/decisions/         numbered decision records
 .githooks/              versioned git hooks (pre-commit, commit-msg)
 .github/                CI, release workflow, PR template
 assets/                 README images only
+main.js                 build output, gitignored (npm run build)
 .scratch/               gitignored; the only place for throwaway scripts, experiments, notes
 ```
 
@@ -80,8 +81,8 @@ builds and attaches the three release assets.
   `eslint-disable` or `as any`.
 - `tsconfig` targets ES2018 syntax (esbuild downlevels) but uses the ES2022 lib, so
   `Array.prototype.at`, `Object.fromEntries`, `??=` are fine.
-- Prettier, ESLint and `tsc` all ignore `main.js`; it is a build artifact that is
-  still committed (open question in `PROGRESS.md`).
+- `main.js` is a gitignored build artifact (decision 0006). `npm run build` creates it;
+  the release workflow attaches it to GitHub releases. Prettier, ESLint and `tsc` ignore it.
 - npm 11 may refuse esbuild's postinstall script on some machines; the build still
   works because esbuild falls back to the platform package. If `npm run build` fails
   with a binary mismatch, run `npm rebuild esbuild`.
