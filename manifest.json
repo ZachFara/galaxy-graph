@@ -1,9 +1,9 @@
 {
   "id": "galaxy-graph",
   "name": "Galaxy Graph",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "minAppVersion": "1.7.2",
-  "description": "Explore your vault as a navigable 3D force-directed galaxy graph.",
+  "description": "See your vault as a navigable 3D galaxy, where each linked neighbourhood glows in its own colour.",
   "author": "Zachariah Farahany",
   "authorUrl": "https://github.com/ZachFara",
   "isDesktopOnly": true
