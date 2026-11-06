@@ -1,5 +1,6 @@
 import type { App } from "obsidian";
 import type { GLink, GNode } from "../types";
+import { visibleMarkdownFiles } from "../utils/excluded";
 
 export function topLevelKey(filePath: string): string {
   const slash = filePath.indexOf("/");
@@ -17,8 +18,8 @@ function topLevelFolderName(filePath: string): string {
 }
 
 export function buildGraphData(app: App): { nodes: GNode[]; links: GLink[] } {
-  const { vault, metadataCache } = app;
-  const files = vault.getMarkdownFiles();
+  const { metadataCache } = app;
+  const files = visibleMarkdownFiles(app);
   const fileSet = new Set(files.map((f) => f.path));
 
   const inDeg = new Map<string, number>();

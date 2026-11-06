@@ -1,6 +1,7 @@
 import { App, TFile } from "obsidian";
 import type { GalaxySettings } from "../settings";
 import type { GNode } from "../types";
+import { visibleMarkdownFiles } from "./excluded";
 import { parseTimestamp } from "./dates";
 
 const COLD_AGE_MS = 180 * 24 * 60 * 60 * 1000; // 6 months = fully cold for leaf notes
@@ -12,7 +13,7 @@ export function computeActivityHeat(app: App, nodes: GNode[], settings: GalaxySe
 
   // Count notes added to each index cluster within the activity window
   const indexCounts = new Map<string, number>();
-  for (const file of app.vault.getMarkdownFiles()) {
+  for (const file of visibleMarkdownFiles(app)) {
     const cache = app.metadataCache.getFileCache(file);
     const raw: unknown = cache?.frontmatter?.links ?? [];
     const links: unknown[] = Array.isArray(raw) ? raw : [raw];

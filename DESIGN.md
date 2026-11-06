@@ -38,8 +38,8 @@ inspector).
   the workspace `css-change` event. The plugin ships no colour of its own except the two
   folder palettes (light tints for dark grounds, deeper tones for light grounds).
 - **`minAppVersion` is 1.7.2.** Only public Obsidian API may be used, with one
-  documented exception: `vault.getConfig("userIgnoreFilters")` for the "Excluded
-  files" setting (planned, see PROGRESS.md).
+  documented exception: `vault.getConfig("userIgnoreFilters")`, read in `utils/excluded.ts`
+  so the galaxy hides the same notes Obsidian's own graph hides.
 
 ## Module layout and dependency rules
 
@@ -143,7 +143,6 @@ are rendered through Obsidian's DOM helpers (`createEl`, `setText`), never as HT
 
 ## Known gaps (tracked in PROGRESS.md)
 
-- Obsidian's "Files and links → Excluded files" setting is not yet honoured.
 - Automated test coverage exists only for pure helpers; modules that import Obsidian
   values at runtime need a test stub before they can be unit-tested.
 - Clouds are capped in world units, not screen pixels, so a cloud can still fill the view

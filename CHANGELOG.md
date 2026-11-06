@@ -2,6 +2,9 @@
 
 ## [Unreleased] — Visual redesign
 
+### Added
+- **Honours Obsidian's "Files and links → Excluded files" setting.** Excluded notes are left out of the graph, the tag list, activity heat and the cluster-growth chart, matching the core graph, search and backlinks.
+
 ### Changed
 - **The canvas follows the Obsidian theme.** Ground, links, dimmed nodes, label pills and cloud blending are all derived from the active theme's colours and update live when the theme or a snippet changes. Light grounds get deeper folder tones.
 - **Depth comes from scene fog, not ornaments.** The wireframe spheres, concentric rings with tick marks, ground grid and starfield are gone; distant notes and links fade toward the ground colour instead.

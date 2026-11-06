@@ -3,6 +3,7 @@ import type { GalaxySettings } from "../settings";
 import type { GLink, GNode } from "../types";
 import { resolveId } from "../types";
 import { getNodeColor } from "../utils/colors";
+import { visibleMarkdownFiles } from "../utils/excluded";
 import { parseTimestamp } from "../utils/dates";
 import type { CanvasTheme } from "../utils/theme";
 
@@ -195,7 +196,7 @@ export class InspectorPanel {
     const constellationDates: Date[] = [];
     const clickedIndexName = node.name.replace(/[[\]]/g, "");
 
-    for (const file of this.ctx.app.vault.getMarkdownFiles()) {
+    for (const file of visibleMarkdownFiles(this.ctx.app)) {
       const cache = this.ctx.app.metadataCache.getFileCache(file);
       const frontmatterLinks: unknown = cache?.frontmatter?.links ?? [];
       const linksArray: unknown[] = Array.isArray(frontmatterLinks) ? frontmatterLinks : [frontmatterLinks];
