@@ -1,29 +1,21 @@
 export interface GalaxySettings {
-  popularityDimension: 'ctime' | 'mtime' | 'frontmatter';
+  popularityDimension: "ctime" | "mtime" | "frontmatter";
   popularityFrontmatterKey: string;
   rotationSpeed: number;
-  colorBy: 'folder' | 'index' | 'tag' | 'activity';
+  colorBy: "folder" | "index" | "tag" | "activity";
   indexDegreeThreshold: number;
   tagColorMap: Record<string, string>;
   activityWindowDays: number;
-  activityLeafDateField: 'mtime' | 'ctime';
+  activityLeafDateField: "mtime" | "ctime";
   linkOpacityDefault: number;
   linkOpacityHighlight: number;
   linkOpacityDim: number;
   fogEnabled: boolean;
-  fogMode: 'color' | 'heat';
+  fogMode: "color" | "heat";
   fogMaxOpacity: number;
   topLabelCount: number;
   labelHideDistance: number;
-  clickFlyDistance: number;
   noteTemplate: string;
-  showStars: boolean;
-  starCount: number;
-  starSize: number;
-  starBrightness: number;
-  sphereOpacity: number;
-  ringsOpacity: number;
-  groundGridOpacity: number;
   repelForce: number;
   linkForce: number;
   linkDistance: number;
@@ -31,23 +23,22 @@ export interface GalaxySettings {
 }
 
 export const DEFAULT_SETTINGS: GalaxySettings = {
-  popularityDimension: 'ctime',
-  popularityFrontmatterKey: 'updated',
+  popularityDimension: "ctime",
+  popularityFrontmatterKey: "updated",
   rotationSpeed: 0.001,
-  colorBy: 'folder',
+  colorBy: "folder",
   indexDegreeThreshold: 10,
   tagColorMap: {},
   activityWindowDays: 30,
-  activityLeafDateField: 'mtime',
-  linkOpacityDefault: 0.30,
-  linkOpacityHighlight: 0.90,
+  activityLeafDateField: "mtime",
+  linkOpacityDefault: 0.25,
+  linkOpacityHighlight: 0.9,
   linkOpacityDim: 0.02,
   fogEnabled: true,
-  fogMode: 'color',
-  fogMaxOpacity: 0.35,
+  fogMode: "color",
+  fogMaxOpacity: 0.28,
   topLabelCount: 10,
   labelHideDistance: 3000,
-  clickFlyDistance: 600,
   noteTemplate: `---
 date: {{date}}
 links:
@@ -59,15 +50,28 @@ tags:
 # {{title}}
 
 `,
-  showStars: true,
-  starCount: 2000,
-  starSize: 1.2,
-  starBrightness: 0.8,
-  sphereOpacity: 0.06,
-  ringsOpacity: 0.10,
-  groundGridOpacity: 0.15,
   repelForce: -30,
   linkForce: 0.5,
   linkDistance: 30,
   centerGravity: 0.015,
 };
+
+/**
+ * Keeps only the keys that exist in DEFAULT_SETTINGS with a value of the same type.
+ * Settings removed in later versions (starfield, depth grid, click zoom distance) are
+ * dropped here so stale keys never accumulate in data.json.
+ */
+export function sanitizeSettings(saved: unknown): Partial<GalaxySettings> {
+  if (saved === null || typeof saved !== "object") return {};
+  const source = saved as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(DEFAULT_SETTINGS) as (keyof GalaxySettings)[]) {
+    const fallback: unknown = DEFAULT_SETTINGS[key];
+    const value = source[key];
+    if (value === undefined || value === null) continue;
+    if (typeof value !== typeof fallback) continue;
+    if (typeof fallback === "object" && Array.isArray(value)) continue;
+    out[key] = value;
+  }
+  return out;
+}

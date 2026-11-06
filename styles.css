@@ -1,23 +1,71 @@
 /* Galaxy Graph plugin styles.
-   Plugin-wide accent colors are defined as custom properties on the view root
-   so themes and snippets can override them in one place. */
+   Every colour comes from the active Obsidian theme. The only plugin-specific colour is
+   --galaxy-node-color, set per selected note on the inspector so its title, badge and
+   chart share the note's own hue. */
 
 .galaxy-view-root {
-  --galaxy-accent: #8ab4f8;
-  --galaxy-blue: #4fc3f7;
-  --galaxy-green: #81c784;
-  --galaxy-panel-border: rgba(100, 150, 255, 0.25);
   position: relative;
   overflow: hidden;
   background: var(--background-primary);
   padding: 0;
 }
 
+.galaxy-view-root .is-hidden {
+  display: none;
+}
+
 .galaxy-canvas {
   position: absolute;
   inset: 0;
-  width: 100%;
-  height: 100%;
+}
+
+/* ---- Shared controls ---- */
+
+.galaxy-view-root button {
+  box-shadow: none;
+}
+
+.galaxy-icon-btn {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  border-radius: var(--radius-s);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.galaxy-icon-btn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.galaxy-icon-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.galaxy-text-btn,
+.galaxy-inline-btn {
+  margin-top: 6px;
+  font-size: var(--font-ui-smaller);
+}
+
+.galaxy-text-btn {
+  padding: 2px 0;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.galaxy-text-btn:hover {
+  color: var(--text-normal);
 }
 
 /* ---- Top bar ---- */
@@ -26,51 +74,80 @@
   position: absolute;
   top: 12px;
   left: 12px;
+  right: 12px;
   z-index: 10;
   display: flex;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
   flex-wrap: wrap;
+  pointer-events: none;
+}
+
+.galaxy-topbar > * {
+  pointer-events: auto;
 }
 
 .galaxy-topbar-btn {
-  background: var(--background-modifier-hover);
+  height: 28px;
+  padding: 0 10px;
+  font-size: var(--font-ui-small);
+  line-height: 1;
+  border-radius: var(--radius-s);
+  background: var(--background-secondary);
   color: var(--text-normal);
   border: 1px solid var(--background-modifier-border);
-  padding: 4px 10px;
-  border-radius: 4px;
   cursor: pointer;
-  font-size: 12px;
   white-space: nowrap;
 }
 
-.galaxy-topbar-btn--small {
-  padding: 3px 7px;
-  font-size: 11px;
+.galaxy-topbar-btn:hover {
+  background: var(--background-modifier-hover);
 }
 
-.galaxy-timeline-speedbar {
+.galaxy-topbar-btn.is-on {
+  background: var(--text-normal);
+  color: var(--background-primary);
+  border-color: transparent;
+}
+
+.galaxy-topbar-btn--icon {
+  width: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.galaxy-topbar-btn--icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.galaxy-topbar-group {
   display: none;
   gap: 4px;
 }
 
-.galaxy-timeline-speedbar.is-visible {
-  display: flex;
+.galaxy-topbar-group.is-visible {
+  display: inline-flex;
+}
+
+.galaxy-topbar-readout {
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 10px;
+  border-radius: var(--radius-s);
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .galaxy-timeline-date {
-  color: var(--galaxy-accent);
-  font-size: 11px;
-  display: none;
-}
-
-.galaxy-timeline-date.is-visible {
-  display: inline;
-}
-
-.galaxy-count-label {
-  color: var(--text-faint);
-  font-size: 11px;
+  color: var(--text-normal);
+  font-weight: 600;
 }
 
 /* ---- Floating node labels over the canvas ---- */
@@ -85,25 +162,42 @@
 
 .galaxy-label {
   position: absolute;
-  display: flex;
+  left: 0;
+  top: 0;
+  height: 22px;
+  display: inline-flex;
   align-items: center;
-  gap: 4px;
-  background: rgba(0, 0, 0, 0.65);
-  border-radius: 4px;
-  padding: 2px 7px;
-  font-size: 11px;
+  gap: 6px;
+  padding: 0 9px 0 8px;
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--background-primary) 88%, transparent);
+  color: var(--text-normal);
+  font-size: var(--font-ui-smaller);
   font-weight: 500;
-  color: #ffffff;
   white-space: nowrap;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
-  pointer-events: none;
-  user-select: none;
-  transform: translate(-50%, -150%);
+  will-change: transform;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.galaxy-label:hover {
+  background: var(--background-primary);
+}
+
+/* The graph library's hover tooltip, restyled to match the label pills. */
+.galaxy-view-root .scene-tooltip {
+  padding: 2px 9px;
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--background-primary) 88%, transparent);
+  color: var(--text-normal);
+  font-family: var(--font-interface);
+  font-size: var(--font-ui-smaller);
+  font-weight: 500;
 }
 
 .galaxy-label-dot {
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   flex-shrink: 0;
 }
@@ -111,22 +205,22 @@
 /* ---- Inspector panel ---- */
 
 .galaxy-inspector {
+  --galaxy-node-color: var(--text-normal);
   position: absolute;
   top: 12px;
   right: 12px;
-  width: 270px;
-  z-index: 10;
-  background: var(--background-primary);
-  border: 1px solid var(--galaxy-panel-border);
-  border-radius: 8px;
-  padding: 14px;
-  display: none;
-  color: var(--text-normal);
-  backdrop-filter: blur(12px);
-  max-height: 82vh;
+  width: 288px;
+  max-height: calc(100% - 24px);
   overflow-y: auto;
-  font-size: 13px;
-  line-height: 1.55;
+  z-index: 10;
+  display: none;
+  padding: 16px;
+  border-radius: var(--radius-m);
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  line-height: 1.5;
 }
 
 .galaxy-inspector.is-visible {
@@ -135,28 +229,18 @@
 
 .galaxy-inspector-header {
   display: flex;
-  justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 10px;
+  gap: 8px;
+  margin-bottom: 6px;
 }
 
 .galaxy-inspector-title {
-  font-weight: 600;
-  font-size: 14px;
   flex: 1;
-  word-break: break-word;
+  font-size: var(--font-ui-medium);
+  font-weight: 600;
   line-height: 1.3;
-}
-
-.galaxy-inspector-close {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  font-size: 20px;
-  padding: 0 0 0 8px;
-  line-height: 1;
-  flex-shrink: 0;
+  color: var(--galaxy-node-color);
+  overflow-wrap: anywhere;
 }
 
 .galaxy-inspector-stats {
@@ -164,126 +248,94 @@
   gap: 14px;
   margin-bottom: 10px;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--font-ui-smaller);
+  font-variant-numeric: tabular-nums;
 }
 
-.galaxy-stat-label {
-  opacity: 0.6;
+.galaxy-inspector-stats b {
+  color: var(--text-normal);
+  font-weight: 600;
 }
 
 .galaxy-inspector-badge {
   display: inline-block;
-  margin-bottom: 10px;
-  padding: 2px 7px;
-  border-radius: 3px;
-  font-size: 11px;
-  background: var(--background-modifier-hover);
+  margin-bottom: 12px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: var(--font-ui-smaller);
+  color: var(--galaxy-node-color);
+  background: color-mix(in srgb, var(--galaxy-node-color) 14%, transparent);
 }
 
 .galaxy-inspector-preview {
-  font-size: 12px;
+  margin: 0 0 12px;
   color: var(--text-muted);
-  font-style: italic;
-  margin: 8px 0 12px;
-  border-left: 2px solid var(--background-modifier-border);
-  padding-left: 8px;
-  min-height: 16px;
+  font-size: var(--font-ui-smaller);
+  line-height: 1.5;
 }
 
-.galaxy-inspector-preview.is-plain {
-  font-style: normal;
+.galaxy-inspector-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 4px;
 }
 
-.galaxy-open-btn,
-.galaxy-add-btn {
-  width: 100%;
-  padding: 6px;
-  margin-bottom: 12px;
-  border-radius: 5px;
-  cursor: pointer;
-  font-size: 12px;
-}
-
-.galaxy-open-btn {
-  background: color-mix(in srgb, var(--galaxy-blue) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--galaxy-blue) 30%, transparent);
-  color: var(--galaxy-blue);
-}
-
-.galaxy-add-btn {
-  background: color-mix(in srgb, var(--galaxy-green) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--galaxy-green) 30%, transparent);
-  color: var(--galaxy-green);
+.galaxy-inspector-actions button {
+  flex: 1;
+  height: 30px;
+  padding: 0 8px;
+  font-size: var(--font-ui-small);
+  white-space: nowrap;
 }
 
 .galaxy-section-heading {
-  font-size: 10px;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
-  margin-top: 6px;
-  margin-bottom: 6px;
-  opacity: 0.7;
+  margin: 16px 0 4px;
+  font-size: var(--font-ui-smaller);
+  font-weight: 600;
+  color: var(--text-normal);
 }
 
 .galaxy-link-list {
-  margin: 0 0 6px;
-  padding: 0 0 0 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .galaxy-link-item {
-  cursor: pointer;
-  font-size: 12px;
+  display: block;
+  padding: 3px 0;
+  color: var(--text-normal);
   text-decoration: none;
+  cursor: pointer;
+  font-size: var(--font-ui-small);
 }
 
-.galaxy-link-item--out {
-  color: var(--galaxy-blue);
+.galaxy-link-item:hover {
+  color: var(--text-accent);
 }
 
-.galaxy-link-item--in {
-  color: var(--galaxy-green);
-}
-
-.galaxy-link-more {
+.galaxy-link-more,
+.galaxy-empty-note,
+.galaxy-empty-hint,
+.galaxy-cluster-summary {
+  margin: 2px 0 0;
   color: var(--text-muted);
-  font-size: 11px;
-  list-style: none;
-  opacity: 0.6;
-}
-
-.galaxy-empty-note {
-  color: var(--text-muted);
-  font-size: 12px;
-  margin: 0;
-  opacity: 0.6;
+  font-size: var(--font-ui-smaller);
 }
 
 .galaxy-subpanel {
-  margin-top: 14px;
-  border-top: 1px solid var(--background-modifier-border);
+  margin-top: 16px;
   padding-top: 10px;
+  border-top: 1px solid var(--background-modifier-border);
 }
 
-.galaxy-empty-hint {
-  font-size: 11px;
-  color: var(--text-muted);
-  font-style: italic;
-  opacity: 0.65;
-}
-
-.galaxy-cluster-summary {
-  font-size: 11px;
-  color: var(--text-muted);
-  opacity: 0.8;
+.galaxy-subpanel .galaxy-section-heading {
+  margin-top: 0;
 }
 
 .galaxy-svg {
   display: block;
-}
-
-.galaxy-svg--clickable {
-  cursor: pointer;
+  max-width: 100%;
 }
 
 .galaxy-svg--clickable circle {
@@ -295,13 +347,13 @@
 }
 
 .galaxy-note-count {
-  font-size: 10px;
   margin-top: 4px;
-  opacity: 0.8;
+  font-size: var(--font-ui-smaller);
+  color: var(--galaxy-node-color);
 }
 
 .galaxy-neighbor-list {
-  max-height: 200px;
+  max-height: 220px;
   overflow-y: auto;
 }
 
@@ -313,6 +365,10 @@
   cursor: pointer;
 }
 
+.galaxy-neighbor-item:hover .galaxy-neighbor-name {
+  color: var(--text-accent);
+}
+
 .galaxy-neighbor-dot {
   width: 8px;
   height: 8px;
@@ -322,17 +378,16 @@
 
 .galaxy-neighbor-name {
   flex: 1;
-  font-size: 11px;
-  color: var(--text-normal);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: var(--font-ui-small);
 }
 
 .galaxy-neighbor-degree {
-  font-size: 10px;
-  color: var(--galaxy-accent);
-  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---- Settings panel ---- */
@@ -343,66 +398,32 @@
   right: 0;
   width: 320px;
   height: 100%;
-  background: var(--background-primary);
-  border-left: 1px solid var(--galaxy-panel-border);
   z-index: 20;
   display: flex;
   flex-direction: column;
+  background: var(--background-secondary);
+  border-left: 1px solid var(--background-modifier-border);
   transform: translateX(100%);
-  transition: transform 0.3s ease-in-out;
+  transition: transform 0.25s ease;
   overflow: hidden;
-  font-family: var(--font-interface);
 }
 
 .galaxy-settings-panel.is-open {
-  transform: translateX(0);
-}
-
-.galaxy-settings-panel input[type="range"] {
-  -webkit-appearance: none;
-  height: 4px;
-  border-radius: 2px;
-  background: var(--background-modifier-border);
-  outline: none;
-}
-
-.galaxy-settings-panel input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--galaxy-accent);
-  cursor: pointer;
-}
-
-.galaxy-settings-panel input[type="radio"],
-.galaxy-settings-panel input[type="checkbox"] {
-  accent-color: var(--galaxy-accent);
-  cursor: pointer;
+  transform: none;
 }
 
 .galaxy-settings-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 14px 16px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--background-modifier-border);
   flex-shrink: 0;
 }
 
 .galaxy-settings-title {
-  font-size: 14px;
+  font-size: var(--font-ui-medium);
   font-weight: 600;
-  color: var(--text-normal);
-}
-
-.galaxy-settings-close {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  font-size: 16px;
-  padding: 0;
 }
 
 .galaxy-settings-body {
@@ -412,32 +433,44 @@
 }
 
 .galaxy-settings-section {
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 .galaxy-settings-section-heading {
-  font-size: 11px;
+  margin: 0 0 6px;
+  font-size: var(--font-ui-small);
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-  color: var(--galaxy-accent);
-  margin: 0 0 10px;
-  opacity: 0.9;
-  border-bottom: 1px solid color-mix(in srgb, var(--galaxy-accent) 15%, transparent);
-  padding-bottom: 6px;
+  color: var(--text-normal);
+}
+
+.galaxy-choice-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: var(--font-ui-small);
+  cursor: pointer;
+}
+
+.galaxy-choice-row input {
+  margin: 0;
+}
+
+.galaxy-subrow {
+  margin-top: 8px;
 }
 
 .galaxy-setting-label {
   display: block;
-  font-size: 12px;
+  margin: 8px 0 4px;
+  font-size: var(--font-ui-smaller);
   color: var(--text-muted);
-  margin-bottom: 4px;
 }
 
 .galaxy-setting-desc {
-  font-size: 11px;
-  color: var(--text-muted);
   margin-top: 4px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
 }
 
 .galaxy-setting-desc--above {
@@ -445,123 +478,36 @@
 }
 
 .galaxy-input {
-  background: var(--background-modifier-hover);
-  border: 1px solid var(--background-modifier-border);
-  color: var(--text-normal);
-  border-radius: 4px;
-  padding: 5px 8px;
-  font-size: 12px;
   width: 100%;
   box-sizing: border-box;
-}
-
-.galaxy-input--flex {
-  width: auto;
-  flex: 1;
+  font-size: var(--font-ui-small);
 }
 
 .galaxy-template-textarea {
-  height: auto;
   font-family: var(--font-monospace);
-  font-size: 11px;
+  font-size: var(--font-ui-smaller);
   resize: vertical;
 }
 
-.galaxy-subrow {
-  margin-top: 6px;
+.galaxy-slider-row {
+  margin: 10px 0;
 }
 
-.galaxy-radio-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
-}
-
-.galaxy-radio-row--inline {
-  gap: 6px;
-  margin-bottom: 0;
-}
-
-.galaxy-check-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.galaxy-check-row--tight {
-  margin-bottom: 0;
-}
-
-.galaxy-radio-label {
-  font-size: 12px;
-  color: var(--text-normal);
-}
-
-.galaxy-radio-label--click {
-  cursor: pointer;
-}
-
-.galaxy-leaf-row {
-  display: flex;
-  gap: 12px;
-  margin-top: 4px;
-}
-
-.galaxy-slider-flex-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.galaxy-slider-block {
-  margin-bottom: 12px;
-}
-
-.galaxy-slider-block--below {
-  margin-top: 10px;
-  margin-bottom: 0;
-}
-
-.galaxy-slider-label-row {
+.galaxy-slider-head {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 4px;
-}
-
-.galaxy-slider-name {
-  font-size: 12px;
+  margin-bottom: 2px;
+  font-size: var(--font-ui-smaller);
   color: var(--text-muted);
 }
 
-.galaxy-slider-name--flex {
-  flex: 1;
-}
-
 .galaxy-slider-value {
-  font-size: 11px;
-  color: var(--galaxy-accent);
+  font-variant-numeric: tabular-nums;
 }
 
-.galaxy-slider-value--right {
-  min-width: 32px;
-  text-align: right;
-}
-
-.galaxy-slider {
-  flex: 1;
-  cursor: pointer;
-}
-
-.galaxy-slider--full {
+.galaxy-settings-panel input[type="range"].galaxy-slider {
   width: 100%;
-  cursor: pointer;
-}
-
-.galaxy-slider--compact {
-  width: 80px;
-  cursor: pointer;
+  margin: 0;
 }
 
 .galaxy-taglist {
@@ -571,66 +517,55 @@
 .galaxy-tag-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 4px;
+  gap: 8px;
+  padding: 2px 0;
 }
 
 .galaxy-tag-name {
   flex: 1;
-  font-size: 11px;
-  color: var(--text-normal);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-ui-small);
 }
 
 .galaxy-color-input {
-  width: 32px;
+  width: 22px;
   height: 22px;
+  padding: 0;
   border: none;
-  cursor: pointer;
-  border-radius: 3px;
-}
-
-.galaxy-color-input--lg {
-  height: 26px;
-}
-
-.galaxy-remove-btn {
   background: none;
-  border: none;
-  color: var(--text-muted);
+  border-radius: var(--radius-s);
   cursor: pointer;
-  font-size: 14px;
+  flex-shrink: 0;
 }
 
 .galaxy-add-row {
+  position: relative;
   display: flex;
   gap: 6px;
   align-items: center;
-  position: relative;
+  margin-top: 6px;
 }
 
-.galaxy-accent-btn {
-  background: color-mix(in srgb, var(--galaxy-blue) 15%, transparent);
-  border: 1px solid color-mix(in srgb, var(--galaxy-blue) 30%, transparent);
-  color: var(--galaxy-blue);
-  border-radius: 4px;
-  padding: 4px 8px;
-  cursor: pointer;
-  font-size: 11px;
+.galaxy-add-row .galaxy-input {
+  flex: 1;
+  width: auto;
 }
 
 .galaxy-suggestions {
   position: absolute;
   left: 0;
-  top: 32px;
+  top: 34px;
   display: none;
   max-height: 220px;
   overflow-y: auto;
-  background: var(--background-secondary);
-  border: 1px solid var(--background-modifier-border);
-  border-radius: 6px;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
-  z-index: 30;
   padding: 4px;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  box-shadow: var(--shadow-s);
+  z-index: 30;
 }
 
 .galaxy-suggestions.is-open {
@@ -638,49 +573,28 @@
 }
 
 .galaxy-suggestion-item {
-  padding: 6px 8px;
-  border-radius: 4px;
-  color: var(--text-normal);
-  font-size: 12px;
+  padding: 5px 8px;
+  border-radius: var(--radius-s);
+  font-size: var(--font-ui-small);
   cursor: pointer;
-  background: transparent;
 }
 
 .galaxy-suggestion-item.is-selected {
-  background: color-mix(in srgb, var(--galaxy-accent) 18%, transparent);
-}
-
-.galaxy-muted-btn {
   background: var(--background-modifier-hover);
-  border: 1px solid var(--background-modifier-border);
-  color: var(--text-muted);
-  border-radius: 4px;
-  padding: 5px 10px;
-  cursor: pointer;
-  font-size: 11px;
-}
-
-.galaxy-reset-link {
-  display: inline-block;
-  margin-top: 8px;
-  font-size: 11px;
-  color: var(--galaxy-accent);
-  cursor: pointer;
-  text-decoration: none;
 }
 
 .galaxy-settings-footer {
-  padding: 12px 16px;
-  border-top: 1px solid var(--background-modifier-border);
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding: 12px 16px;
+  border-top: 1px solid var(--background-modifier-border);
   flex-shrink: 0;
 }
 
 .galaxy-saved-flash {
-  font-size: 11px;
-  color: var(--galaxy-accent);
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
   opacity: 0;
   transition: opacity 0.3s ease;
 }

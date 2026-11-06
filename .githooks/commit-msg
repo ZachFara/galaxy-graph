@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Enforce conventional commits on every commit message.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+exec npx commitlint --edit "$1"

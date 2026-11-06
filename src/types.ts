@@ -2,7 +2,6 @@ export interface GNode {
   id: string;
   name: string;
   val: number;
-  color: string;
   folder: string;
   folderName: string;
   filePath: string;

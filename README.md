@@ -26,7 +26,10 @@ they were created:
 
 ## Installation
 
-Manual install (not yet on the Community Plugins store):
+Manual install (not yet on the Community Plugins store). Either download `main.js`,
+`manifest.json` and `styles.css` from the
+[latest release](https://github.com/ZachFara/galaxy-graph/releases/latest) and skip to
+step 2, or build from source:
 
 1. Clone this repo somewhere outside your vault, then build it:
    ```bash
@@ -76,6 +79,7 @@ ln -sf "$(pwd)/main.js" "<YourVault>/.obsidian/plugins/galaxy-graph/main.js"
 ## Inspector panel
 
 Shows for the selected note:
+
 - Title (coloured by folder)
 - Out / In / Total connection counts
 - First ~200 chars of note body (frontmatter stripped)
