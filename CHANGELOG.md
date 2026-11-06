@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased] — Visual redesign
+## [1.1.0] — Visual redesign (current)
 
 ### Added
 - **Honours Obsidian's "Files and links → Excluded files" setting.** Excluded notes are left out of the graph, the tag list, activity heat and the cluster-growth chart, matching the core graph, search and backlinks.
@@ -19,7 +19,7 @@
 
 ---
 
-## [1.0.1] — Store Review Fixes (current)
+## [1.0.1] — Store Review Fixes
 
 ### Fixed
 - **Popout window compatibility** — all DOM/timer calls (`document`, `setTimeout`, `requestAnimationFrame`) now use the window-scoped forms (`activeDocument`, `window.setTimeout`, `window.requestAnimationFrame`) so the view behaves correctly when dragged into an Obsidian popout window
