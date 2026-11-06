@@ -21,17 +21,18 @@ export function heatColor(degree: number, minDeg: number, maxDeg: number): strin
   return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
 }
 
-const HEAT_STOPS: Array<[number, number, number, number]> = [
-  [0.00,  18,  18,  48],   // cold: near-black with blue tint
-  [0.25,  28,  60, 140],   // cool blue
-  [0.50, 160,  72,   0],   // deep amber
-  [0.75, 255, 110,  20],   // orange
-  [1.00, 255, 235, 170],   // bright warm white-orange
+const HEAT_STOPS: [number, number, number, number][] = [
+  [0.0, 18, 18, 48], // cold: near-black with blue tint
+  [0.25, 28, 60, 140], // cool blue
+  [0.5, 160, 72, 0], // deep amber
+  [0.75, 255, 110, 20], // orange
+  [1.0, 255, 235, 170], // bright warm white-orange
 ];
 
-export function activityHeatColor(heat: number): string {
+function activityHeatColor(heat: number): string {
   const h = Math.max(0, Math.min(1, heat));
-  let lo = HEAT_STOPS[0], hi = HEAT_STOPS[HEAT_STOPS.length - 1];
+  let lo = HEAT_STOPS[0],
+    hi = HEAT_STOPS[HEAT_STOPS.length - 1];
   for (let i = 0; i < HEAT_STOPS.length - 1; i++) {
     if (h >= HEAT_STOPS[i][0] && h <= HEAT_STOPS[i + 1][0]) {
       lo = HEAT_STOPS[i];
@@ -53,7 +54,7 @@ export function getNodeColor(n: GNode, s: GalaxySettings): string {
     case "index":
       return n.degree >= s.indexDegreeThreshold ? "#ff9800" : DEFAULT_COLOR;
     case "tag": {
-      for (const tag of (n.tags ?? [])) {
+      for (const tag of n.tags ?? []) {
         const c = s.tagColorMap[tag];
         if (c) return c;
       }

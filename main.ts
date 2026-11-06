@@ -3,9 +3,9 @@ import { GalaxyView, VIEW_TYPE_GALAXY } from "./src/GalaxyView";
 import { DEFAULT_SETTINGS, type GalaxySettings } from "./src/settings";
 
 export default class GalaxyPlugin extends Plugin {
-  settings: GalaxySettings = { ...DEFAULT_SETTINGS };
+  override settings: GalaxySettings = { ...DEFAULT_SETTINGS };
 
-  async onload() {
+  override async onload() {
     const saved = ((await this.loadData()) ?? {}) as Partial<GalaxySettings>;
     this.settings = Object.assign({}, DEFAULT_SETTINGS, saved);
     this.registerView(VIEW_TYPE_GALAXY, (leaf: WorkspaceLeaf) => new GalaxyView(leaf, this));
@@ -23,7 +23,7 @@ export default class GalaxyPlugin extends Plugin {
 
   async openView() {
     const { workspace } = this.app;
-    let leaf = workspace.getLeavesOfType(VIEW_TYPE_GALAXY)[0];
+    let leaf = workspace.getLeavesOfType(VIEW_TYPE_GALAXY).at(0);
     if (!leaf) {
       leaf = workspace.getLeaf("tab");
       await leaf.setViewState({ type: VIEW_TYPE_GALAXY, active: true });

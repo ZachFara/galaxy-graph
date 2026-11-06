@@ -8,7 +8,7 @@ export class FogManager {
   private fogGroup: THREE.Group | null = null;
   private labelGroup: THREE.Group | null = null;
   private fogTexture: THREE.CanvasTexture | null = null;
-  readonly fogNodeMap: Map<string, THREE.Sprite> = new Map();
+  readonly fogNodeMap = new Map<string, THREE.Sprite>();
 
   constructor(private scene: THREE.Scene) {}
 
@@ -16,12 +16,14 @@ export class FogManager {
     const size = 128;
     const canvas = activeDocument.createElement("canvas");
     canvas.width = canvas.height = size;
-    const ctx = canvas.getContext("2d")!;
-    const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-    grad.addColorStop(0, "rgba(255,255,255,1)");
-    grad.addColorStop(1, "rgba(255,255,255,0)");
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, size, size);
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+      grad.addColorStop(0, "rgba(255,255,255,1)");
+      grad.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, size, size);
+    }
     return new THREE.CanvasTexture(canvas);
   }
 
@@ -34,9 +36,11 @@ export class FogManager {
     }
 
     if (!s.fogEnabled) return;
-    if (!this.fogTexture) this.fogTexture = this.createFogTexture();
+    this.fogTexture ??= this.createFogTexture();
 
-    const hubNodes = nodes.filter((n) => n.degree >= s.indexDegreeThreshold && n.x != null && n.y != null && n.z != null);
+    const hubNodes = nodes.filter(
+      (n) => n.degree >= s.indexDegreeThreshold && n.x != null && n.y != null && n.z != null,
+    );
     if (hubNodes.length === 0) return;
 
     this.fogGroup = new THREE.Group();
@@ -46,9 +50,10 @@ export class FogManager {
     const minDeg = s.indexDegreeThreshold;
 
     for (const node of hubNodes) {
-      const color = s.fogMode === "heat"
-        ? heatColor(node.degree, minDeg, maxDeg)
-        : (FOLDER_PALETTE[node.folder] ?? DEFAULT_COLOR);
+      const color =
+        s.fogMode === "heat"
+          ? heatColor(node.degree, minDeg, maxDeg)
+          : (FOLDER_PALETTE[node.folder] ?? DEFAULT_COLOR);
 
       const nodeRadius = Math.sqrt(node.val) * 5;
       const t = Math.min(1, (node.degree - minDeg) / Math.max(1, maxDeg - minDeg));
@@ -64,7 +69,7 @@ export class FogManager {
       });
       const sprite = new THREE.Sprite(mat);
       sprite.scale.setScalar(fogRadius);
-      sprite.position.set(node.x!, node.y!, node.z!);
+      sprite.position.set(node.x ?? 0, node.y ?? 0, node.z ?? 0);
       this.fogGroup.add(sprite);
       this.fogNodeMap.set(node.id, sprite);
     }
@@ -76,20 +81,18 @@ export class FogManager {
     const nodeById = new Map(nodes.map((node) => [node.id, node]));
     for (const [nodeId, sprite] of this.fogNodeMap) {
       const node = nodeById.get(nodeId);
-      if (node && node.x != null && node.y != null && node.z != null) {
+      if (node?.x != null && node.y != null && node.z != null) {
         sprite.position.set(node.x, node.y, node.z);
       }
     }
   }
 
-  rebuildLabels(_nodes: GNode[], _topLabelCount: number) {
+  rebuildLabels() {
     if (!this.labelGroup) return;
     this.scene.remove(this.labelGroup);
     this.labelGroup.traverse(disposeObject3DWithMaps);
     this.labelGroup = null;
   }
-
-  updateLabelPosition(_node: GNode) {}
 
   dispose() {
     this.fogNodeMap.clear();

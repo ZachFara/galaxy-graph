@@ -2,6 +2,7 @@ import { App, Notice, TFile } from "obsidian";
 import type { GalaxySettings } from "../settings";
 import type { GLink, GNode } from "../types";
 import { resolveId } from "../types";
+import { parseTimestamp } from "../utils/dates";
 import { DEFAULT_COLOR, FOLDER_PALETTE, getNodeColor } from "../utils/colors";
 
 export interface InspectorPanelActions {
@@ -38,8 +39,13 @@ export class InspectorPanel {
     for (const link of graphData.links) {
       const src = resolveId(link.source);
       const tgt = resolveId(link.target);
-      if (src === node.id) { const t = byId.get(tgt); if (t) outgoing.push(t); }
-      else if (tgt === node.id) { const s = byId.get(src); if (s) incoming.push(s); }
+      if (src === node.id) {
+        const t = byId.get(tgt);
+        if (t) outgoing.push(t);
+      } else if (tgt === node.id) {
+        const s = byId.get(src);
+        if (s) incoming.push(s);
+      }
     }
 
     const fc = FOLDER_PALETTE[node.folder] ?? DEFAULT_COLOR;
@@ -49,10 +55,17 @@ export class InspectorPanel {
     title.style.color = fc;
     title.textContent = node.name;
     const closeBtn = header.createEl("button", { text: "×", cls: "galaxy-inspector-close" });
-    closeBtn.onclick = () => { this.actions.clearHighlight(); this.hide(); };
+    closeBtn.onclick = () => {
+      this.actions.clearHighlight();
+      this.hide();
+    };
 
     const stats = panel.createDiv({ cls: "galaxy-inspector-stats" });
-    for (const [lbl, v] of [["Out", node.outDegree], ["In", node.inDegree], ["Total", node.degree]] as [string, number][]) {
+    for (const [lbl, v] of [
+      ["Out", node.outDegree],
+      ["In", node.inDegree],
+      ["Total", node.degree],
+    ] as [string, number][]) {
       const stat = stats.createEl("span");
       stat.createSpan({ text: `${lbl}:`, cls: "galaxy-stat-label" });
       stat.appendText(` ${v}`);
@@ -77,10 +90,15 @@ export class InspectorPanel {
     };
 
     const truncTitle = node.name.length > 20 ? node.name.slice(0, 20) + "…" : node.name;
-    const addNoteBtn = panel.createEl("button", { text: `+ Add note to ${truncTitle}`, cls: "galaxy-add-btn" });
+    const addNoteBtn = panel.createEl("button", {
+      text: `+ Add note to ${truncTitle}`,
+      cls: "galaxy-add-btn",
+    });
     addNoteBtn.onclick = async () => {
       try {
-        const folderPath = node.filePath.includes("/") ? node.filePath.substring(0, node.filePath.lastIndexOf("/")) : "";
+        const folderPath = node.filePath.includes("/")
+          ? node.filePath.substring(0, node.filePath.lastIndexOf("/"))
+          : "";
         const now = new Date();
         const timestamp = now.toISOString().slice(0, 10);
         const baseName = `Untitled ${timestamp}`;
@@ -177,9 +195,7 @@ export class InspectorPanel {
         const clean = String(link).replace(/[[\]]/g, "").split("|")[0].trim();
         if (clean !== clickedIndexName) continue;
 
-        const rawDate: unknown = cache?.frontmatter?.date;
-        const parsedDate = rawDate ? new Date(String(rawDate)) : new Date(file.stat.ctime);
-        constellationDates.push(isNaN(parsedDate.getTime()) ? new Date(file.stat.ctime) : parsedDate);
+        constellationDates.push(new Date(parseTimestamp(cache?.frontmatter?.date, file.stat.ctime)));
         break;
       }
     }
@@ -196,7 +212,11 @@ export class InspectorPanel {
     let startMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 11, 1);
     let endMonth = currentMonth;
     const earliest = new Date(constellationDates[0].getFullYear(), constellationDates[0].getMonth(), 1);
-    const latest = new Date(constellationDates[constellationDates.length - 1].getFullYear(), constellationDates[constellationDates.length - 1].getMonth(), 1);
+    const latest = new Date(
+      constellationDates[constellationDates.length - 1].getFullYear(),
+      constellationDates[constellationDates.length - 1].getMonth(),
+      1,
+    );
     if (constellationDates.every((date) => date < startMonth)) {
       startMonth = earliest;
       endMonth = latest;
@@ -204,16 +224,19 @@ export class InspectorPanel {
 
     const monthCount = Math.max(
       1,
-      (endMonth.getFullYear() - startMonth.getFullYear()) * 12 + (endMonth.getMonth() - startMonth.getMonth()) + 1
+      (endMonth.getFullYear() - startMonth.getFullYear()) * 12 +
+        (endMonth.getMonth() - startMonth.getMonth()) +
+        1,
     );
-    const monthly = new Array(monthCount).fill(0);
-    const labels = new Array(monthCount).fill("").map((_, i) => {
+    const monthly: number[] = new Array<number>(monthCount).fill(0);
+    const labels = Array.from({ length: monthCount }, (_, i) => {
       const d = new Date(startMonth.getFullYear(), startMonth.getMonth() + i, 1);
       return d.toLocaleString("default", { month: "short", year: "2-digit" });
     });
 
     for (const date of constellationDates) {
-      const monthIndex = (date.getFullYear() - startMonth.getFullYear()) * 12 + (date.getMonth() - startMonth.getMonth());
+      const monthIndex =
+        (date.getFullYear() - startMonth.getFullYear()) * 12 + (date.getMonth() - startMonth.getMonth());
       if (monthIndex >= 0 && monthIndex < monthly.length) monthly[monthIndex]++;
     }
 
@@ -226,13 +249,17 @@ export class InspectorPanel {
     return { monthly, cumulative, labels, totalNotes, indexName: clickedIndexName };
   }
 
-  private renderSparkline(container: HTMLElement, node: GNode, data: {
-    monthly: number[];
-    cumulative: number[];
-    labels: string[];
-    totalNotes: number;
-    indexName: string;
-  }) {
+  private renderSparkline(
+    container: HTMLElement,
+    node: GNode,
+    data: {
+      monthly: number[];
+      cumulative: number[];
+      labels: string[];
+      totalNotes: number;
+      indexName: string;
+    },
+  ) {
     const wrap = container.createDiv({ cls: "galaxy-subpanel" });
 
     wrap.createEl("div", { text: "Cluster growth · date field", cls: "galaxy-section-heading" });
@@ -243,7 +270,10 @@ export class InspectorPanel {
     }
 
     if (data.totalNotes < 3 || data.monthly.length < 3) {
-      wrap.createEl("div", { text: `${data.totalNotes} notes in this cluster`, cls: "galaxy-cluster-summary" });
+      wrap.createEl("div", {
+        text: `${data.totalNotes} notes in this cluster`,
+        cls: "galaxy-cluster-summary",
+      });
       return;
     }
 
@@ -377,7 +407,11 @@ export class InspectorPanel {
       return;
     }
 
-    const W = 200, H = 200, CX = 100, CY = 100, R = 70;
+    const W = 200,
+      H = 200,
+      CX = 100,
+      CY = 100,
+      R = 70;
     const NS = "http://www.w3.org/2000/svg";
 
     const svg = activeDocument.createElementNS(NS, "svg");

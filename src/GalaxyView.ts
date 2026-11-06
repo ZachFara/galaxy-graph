@@ -12,6 +12,7 @@ import { computeActivityHeat } from "./utils/activity";
 import type { GLink, GNode } from "./types";
 import { resolveId } from "./types";
 import { DIM_NODE, getNodeColor } from "./utils/colors";
+import { parseTimestamp } from "./utils/dates";
 import { InspectorPanel } from "./ui/InspectorPanel";
 import { buildSettingsPanel } from "./ui/SettingsPanel";
 
@@ -50,7 +51,10 @@ interface ForceLike {
 }
 
 export class GalaxyView extends ItemView {
-  constructor(leaf: WorkspaceLeaf, private plugin: GalaxyPluginLike) {
+  constructor(
+    leaf: WorkspaceLeaf,
+    private plugin: GalaxyPluginLike,
+  ) {
     super(leaf);
   }
 
@@ -82,7 +86,7 @@ export class GalaxyView extends ItemView {
   private tabVisible = true;
   private timelineActive = false;
   private timelineBtnEl: HTMLElement | null = null;
-  private timelineVisibleSet: Set<string> = new Set();
+  private timelineVisibleSet = new Set<string>();
   private timelineSpeed = 1;
   private timelineDateEl: HTMLElement | null = null;
   private timelineSpeedBar: HTMLElement | null = null;
@@ -96,14 +100,19 @@ export class GalaxyView extends ItemView {
   // Populated once the lazily-loaded three.js / 3d-force-graph modules resolve (see onOpen).
   private THREE: typeof import("three") | null = null;
   private ForceGraph3DCtor: GalaxyGraphCtor | null = null;
-  private FogManagerCtor: (new (scene: THREE.Scene) => FogManager) | null = null;
   private sphereGridMod: typeof import("./scene/SphereGrid") | null = null;
 
-  getViewType() { return VIEW_TYPE_GALAXY; }
-  getDisplayText() { return "Galaxy Graph"; }
-  getIcon() { return "share-2"; }
+  override getViewType() {
+    return VIEW_TYPE_GALAXY;
+  }
+  override getDisplayText() {
+    return "Galaxy Graph";
+  }
+  override getIcon() {
+    return "share-2";
+  }
 
-  async onOpen() {
+  override async onOpen() {
     // Kick off the heavy three.js / 3d-force-graph module loads immediately, in parallel
     // with the synchronous DOM and graph-data setup below — they're only awaited right
     // before they're actually needed (initGraph).
@@ -181,7 +190,9 @@ export class GalaxyView extends ItemView {
       refreshForces: () => this.refreshForces(),
       recomputeActivityHeat: () => this.recomputeActivityHeat(),
       flashSaved: () => this.flashSaved(),
-      setSavedEl: (el) => { this.savedEl = el; },
+      setSavedEl: (el) => {
+        this.savedEl = el;
+      },
     });
 
     this.inspectorEl = root.createDiv({ cls: "galaxy-inspector" });
@@ -211,7 +222,7 @@ export class GalaxyView extends ItemView {
     const data = buildGraphData(this.app);
     this.graphData = data;
     this.fullGraphData = data;
-    if (this.plugin.settings.colorBy === 'activity') {
+    if (this.plugin.settings.colorBy === "activity") {
       computeActivityHeat(this.app, data.nodes, this.plugin.settings);
     }
 
@@ -220,21 +231,28 @@ export class GalaxyView extends ItemView {
       `${data.nodes.length} notes · ${data.links.length} links` +
       (orphanCount ? ` · ${orphanCount} orphans` : "");
 
-    this.registerDomEvent(activeDocument, "keydown", (evt: KeyboardEvent) => {
-      if (evt.key === "Escape" && this.selectedNode !== null) {
-        evt.stopPropagation();
-        evt.preventDefault();
-        this.resetView();
-      }
-    }, { capture: true });
+    this.registerDomEvent(
+      activeDocument,
+      "keydown",
+      (evt: KeyboardEvent) => {
+        if (evt.key === "Escape" && this.selectedNode !== null) {
+          evt.stopPropagation();
+          evt.preventDefault();
+          this.resetView();
+        }
+      },
+      { capture: true },
+    );
 
-    this.registerEvent(this.app.workspace.on("active-leaf-change", (leaf) => {
-      this.tabVisible = leaf === this.leaf;
-      if (this.graph) {
-        if (this.tabVisible) this.graph.resumeAnimation();
-        else this.graph.pauseAnimation();
-      }
-    }));
+    this.registerEvent(
+      this.app.workspace.on("active-leaf-change", (leaf) => {
+        this.tabVisible = leaf === this.leaf;
+        if (this.graph) {
+          if (this.tabVisible) this.graph.resumeAnimation();
+          else this.graph.pauseAnimation();
+        }
+      }),
+    );
 
     if (data.nodes.length > MAX_NODES_WARN) {
       new Notice(`Galaxy Graph: ${data.nodes.length} nodes detected. Rendering may be slow.`, 6000);
@@ -242,8 +260,7 @@ export class GalaxyView extends ItemView {
 
     const [threeMod, forceGraphMod, fogManagerMod, sphereGridMod] = await depsPromise;
     this.THREE = threeMod;
-    this.ForceGraph3DCtor = forceGraphMod.default as GalaxyGraphCtor;
-    this.FogManagerCtor = fogManagerMod.FogManager;
+    this.ForceGraph3DCtor = forceGraphMod.default as unknown as GalaxyGraphCtor;
     this.sphereGridMod = sphereGridMod;
 
     window.setTimeout(() => {
@@ -253,22 +270,29 @@ export class GalaxyView extends ItemView {
       if (renderer) renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
       const scene = this.graph?.scene() ?? null;
       if (scene) {
-        this.hudGroup = this.sphereGridMod!.buildHUDSphere(scene);
-        this.fogManager = new this.FogManagerCtor!(scene);
+        this.hudGroup = sphereGridMod.buildHUDSphere(scene);
+        this.fogManager = new fogManagerMod.FogManager(scene);
         if (this.plugin.settings.showStars) {
           const s = this.plugin.settings;
-          this.starsObject = this.sphereGridMod!.buildStarfield(scene, 800, s.starCount, s.starSize, s.starBrightness);
+          this.starsObject = sphereGridMod.buildStarfield(
+            scene,
+            800,
+            s.starCount,
+            s.starSize,
+            s.starBrightness,
+          );
         }
       }
       this.startRotationLoop();
       this.attachResizeObserver();
       window.setTimeout(() => {
         if (this.graph) {
-          const sceneNow = this.graph.scene();
-          if (sceneNow) {
-            this.gridGroup = this.sphereGridMod!.buildGridSphere(sceneNow, this.graphData.nodes, this.gridGroup);
-            this.updateGridOpacities();
-          }
+          this.gridGroup = sphereGridMod.buildGridSphere(
+            this.graph.scene(),
+            this.graphData.nodes,
+            this.gridGroup,
+          );
+          this.updateGridOpacities();
           this.rebuildFog();
           this.rebuildLabels();
         }
@@ -276,7 +300,7 @@ export class GalaxyView extends ItemView {
     }, 50);
   }
 
-  async onClose() {
+  override onClose(): Promise<void> {
     this.resizeObserver?.disconnect();
 
     if (this.rotationFrameId !== null) {
@@ -298,12 +322,12 @@ export class GalaxyView extends ItemView {
     this.labelOverlayEl?.empty();
 
     if (this.graph) {
-      const scene = this.graph.scene() ?? null;
+      const scene = this.graph.scene();
       this.sphereGridMod?.disposeGroup(scene, this.hudGroup);
       this.hudGroup = null;
       this.sphereGridMod?.disposeGroup(scene, this.gridGroup);
       this.gridGroup = null;
-      if (scene && this.starsObject) {
+      if (this.starsObject) {
         scene.remove(this.starsObject);
         this.starsObject.geometry.dispose();
         (this.starsObject.material as THREE.Material).dispose();
@@ -311,9 +335,14 @@ export class GalaxyView extends ItemView {
       }
       this.fogManager?.dispose();
       this.fogManager = null;
-      try { this.graph.pauseAnimation(); } catch { /* renderer already torn down */ }
+      try {
+        this.graph.pauseAnimation();
+      } catch {
+        /* renderer already torn down */
+      }
       this.graph = null;
     }
+    return Promise.resolve();
   }
 
   private initGraph() {
@@ -325,14 +354,19 @@ export class GalaxyView extends ItemView {
     const hlLinks = this.highlightLinks;
     const accent = this.themeAccent;
 
-    const GraphCtor = this.ForceGraph3DCtor!;
+    const GraphCtor = this.ForceGraph3DCtor;
+    if (!GraphCtor) return;
     this.graph = new GraphCtor(this.graphContainer, { controlType: "orbit" })
-      .width(w).height(h)
+      .width(w)
+      .height(h)
       .backgroundColor(this.themeBg)
       .graphData(this.graphData)
-      .nodeId("id").nodeLabel("name")
+      .nodeId("id")
+      .nodeLabel("name")
       .nodeVal((n: GNode) => this.getAnimatedNodeVal(n))
-      .nodeRelSize(5).nodeOpacity(0.92).nodeResolution(16)
+      .nodeRelSize(5)
+      .nodeOpacity(0.92)
+      .nodeResolution(16)
       .nodeColor((n: GNode) => {
         if (hlNodes.size === 0) return getNodeColor(n, this.plugin.settings);
         return hlNodes.has(n.id) ? accent : DIM_NODE;
@@ -344,7 +378,7 @@ export class GalaxyView extends ItemView {
       .linkWidth((l: GLink) => (hlLinks.has(l) ? 1.8 : 0.5))
       .linkOpacity(1.0)
       .linkDirectionalArrowLength(0)
-      .onNodeClick((n: GNode, ev: MouseEvent) => this.handleNodeClick(n, ev))
+      .onNodeClick((n: GNode) => this.handleNodeClick(n))
       .onNodeDrag((n: GNode) => {
         this.isDragging = true;
         const sprite = this.fogManager?.fogNodeMap.get(n.id);
@@ -396,13 +430,14 @@ export class GalaxyView extends ItemView {
       if (this.autoRotating && !this.isDragging) {
         const camera = this.graph.camera();
         const controls = this.graph.controls() as { target?: { x?: number; z?: number } } | null;
-        if (camera && controls) {
+        if (controls) {
           const tx = controls.target?.x ?? 0;
           const tz = controls.target?.z ?? 0;
           const dx = camera.position.x - tx;
           const dz = camera.position.z - tz;
           const rad = (this.plugin.settings.rotationSpeed / 0.001) * ROT_RAD_PER_MS * dt;
-          const cos = Math.cos(rad), sin = Math.sin(rad);
+          const cos = Math.cos(rad),
+            sin = Math.sin(rad);
           camera.position.x = tx + cos * dx + sin * dz;
           camera.position.z = tz - sin * dx + cos * dz;
         }
@@ -462,7 +497,7 @@ export class GalaxyView extends ItemView {
     // Soft boundary: no gravity inside 350 units, increasing pull beyond that
     const BOUND_RADIUS = 650;
     this.graph.d3Force("center-gravity", (alpha: number) => {
-      for (const node of this.graphData.nodes as Array<GNode & { vx?: number; vy?: number; vz?: number }>) {
+      for (const node of this.graphData.nodes as (GNode & { vx?: number; vy?: number; vz?: number })[]) {
         const x = node.x ?? 0;
         const y = node.y ?? 0;
         const z = node.z ?? 0;
@@ -498,7 +533,9 @@ export class GalaxyView extends ItemView {
       playbackNodes = [...candidateNodes];
     }
 
-    const allNodes = playbackNodes.sort((a, b) => this.getTimelineTimestamp(a) - this.getTimelineTimestamp(b));
+    const allNodes = playbackNodes.sort(
+      (a, b) => this.getTimelineTimestamp(a) - this.getTimelineTimestamp(b),
+    );
 
     const msPerNode = 250 / this.timelineSpeed;
     let idx = 0;
@@ -511,7 +548,7 @@ export class GalaxyView extends ItemView {
 
     const getSpawnNearCentroid = (): { x: number; y: number; z: number } => {
       const positioned = this.fullGraphData.nodes.filter(
-        (v) => this.timelineVisibleSet.has(v.id) && v.x != null
+        (v) => this.timelineVisibleSet.has(v.id) && v.x != null,
       );
       const count = positioned.length || 1;
       const cx = positioned.reduce((s, v) => s + (v.x ?? 0), 0) / count;
@@ -546,7 +583,9 @@ export class GalaxyView extends ItemView {
 
       const visibleNodes = this.fullGraphData.nodes.filter((v) => this.timelineVisibleSet.has(v.id));
       const visibleLinks = this.fullGraphData.links.filter((l) => {
-        return this.timelineVisibleSet.has(resolveId(l.source)) && this.timelineVisibleSet.has(resolveId(l.target));
+        return (
+          this.timelineVisibleSet.has(resolveId(l.source)) && this.timelineVisibleSet.has(resolveId(l.target))
+        );
       });
 
       this.graphData = { nodes: visibleNodes, links: visibleLinks };
@@ -600,13 +639,7 @@ export class GalaxyView extends ItemView {
     if (!(file instanceof TFile)) return 0;
 
     const cache = this.app.metadataCache.getFileCache(file);
-    const rawDate: unknown = cache?.frontmatter?.date;
-    if (rawDate) {
-      const parsed = new Date(String(rawDate));
-      if (!isNaN(parsed.getTime())) return parsed.getTime();
-    }
-
-    return file.stat.ctime;
+    return parseTimestamp(cache?.frontmatter?.date, file.stat.ctime);
   }
 
   private rebuildFog() {
@@ -619,7 +652,7 @@ export class GalaxyView extends ItemView {
       .filter((node) => node.degree >= this.plugin.settings.indexDegreeThreshold)
       .sort((a, b) => b.degree - a.degree)
       .slice(0, this.plugin.settings.topLabelCount);
-    this.fogManager?.rebuildLabels([], 0);
+    this.fogManager?.rebuildLabels();
     this.updateLabelOverlay();
   }
 
@@ -641,7 +674,7 @@ export class GalaxyView extends ItemView {
     if (!this.graph) return;
     const s = this.plugin.settings;
     this.graph.d3Force("center-gravity", (alpha: number) => {
-      for (const node of this.graphData.nodes as Array<GNode & { vx?: number; vy?: number; vz?: number }>) {
+      for (const node of this.graphData.nodes as (GNode & { vx?: number; vy?: number; vz?: number })[]) {
         const x = node.x ?? 0;
         const y = node.y ?? 0;
         const z = node.z ?? 0;
@@ -654,36 +687,6 @@ export class GalaxyView extends ItemView {
         node.vz = (node.vz ?? 0) - z * strength;
       }
     });
-  }
-
-  private getSpawnPosition(node: GNode, nodeById: Map<string, GNode>) {
-    const neighbors: Array<{ x: number; y: number; z: number }> = [];
-    for (const link of this.fullGraphData.links) {
-      const src = resolveId(link.source);
-      const tgt = resolveId(link.target);
-      const neighborId = src === node.id ? tgt : tgt === node.id ? src : null;
-      if (!neighborId || !this.timelineVisibleSet.has(neighborId)) continue;
-      const neighbor = nodeById.get(neighborId);
-      if (neighbor?.x != null && neighbor.y != null && neighbor.z != null) {
-        neighbors.push({ x: neighbor.x, y: neighbor.y, z: neighbor.z });
-      }
-    }
-
-    if (neighbors.length > 0) {
-      const sum = neighbors.reduce((acc, pos) => ({
-        x: acc.x + pos.x,
-        y: acc.y + pos.y,
-        z: acc.z + pos.z,
-      }), { x: 0, y: 0, z: 0 });
-      return {
-        x: sum.x / neighbors.length,
-        y: sum.y / neighbors.length,
-        z: sum.z / neighbors.length,
-      };
-    }
-
-    const offset = () => (Math.random() - 0.5) * 100;
-    return { x: offset(), y: offset(), z: offset() };
   }
 
   private startSpawnAnimation(node: GNode) {
@@ -735,13 +738,13 @@ export class GalaxyView extends ItemView {
   }
 
   private updateLabelOverlay() {
-    if (!this.labelOverlayEl || !this.graph) return;
+    const three = this.THREE;
+    if (!this.labelOverlayEl || !this.graph || !three) return;
     this.labelOverlayEl.empty();
     if (!this.topLabelNodes.length) return;
 
     const camera = this.graph.camera();
     const renderer = this.graph.renderer();
-    if (!camera || !renderer) return;
 
     if (camera.position.length() > this.plugin.settings.labelHideDistance) return;
 
@@ -753,7 +756,7 @@ export class GalaxyView extends ItemView {
     for (const node of this.topLabelNodes) {
       if (node.x == null || node.y == null || node.z == null) continue;
 
-      const vec = new this.THREE!.Vector3(node.x, node.y, node.z);
+      const vec = new three.Vector3(node.x, node.y, node.z);
       vec.project(camera);
       if (vec.z > 1) continue;
 
@@ -779,7 +782,7 @@ export class GalaxyView extends ItemView {
       this.gridGroup,
       this.plugin.settings.sphereOpacity,
       this.plugin.settings.ringsOpacity,
-      this.plugin.settings.groundGridOpacity
+      this.plugin.settings.groundGridOpacity,
     );
   }
 
@@ -788,7 +791,13 @@ export class GalaxyView extends ItemView {
     if (!scene || !this.sphereGridMod) return;
     if (enabled && !this.starsObject) {
       const s = this.plugin.settings;
-      this.starsObject = this.sphereGridMod.buildStarfield(scene, 800, s.starCount, s.starSize, s.starBrightness);
+      this.starsObject = this.sphereGridMod.buildStarfield(
+        scene,
+        800,
+        s.starCount,
+        s.starSize,
+        s.starBrightness,
+      );
     } else if (!enabled && this.starsObject) {
       scene.remove(this.starsObject);
       this.starsObject.geometry.dispose();
@@ -805,18 +814,16 @@ export class GalaxyView extends ItemView {
   private attachResizeObserver() {
     if (!this.graphContainer || !this.graph) return;
     this.resizeObserver = new ResizeObserver((entries) => {
-      const e = entries[0];
+      const e = entries.at(0);
       if (!e || !this.graph) return;
       this.graph.width(e.contentRect.width).height(e.contentRect.height);
     });
     this.resizeObserver.observe(this.graphContainer);
   }
 
-  private handleNodeClick(node: GNode, _ev: MouseEvent) {
+  private handleNodeClick(node: GNode) {
     const now = Date.now();
-    const isDouble =
-      now - this.lastClickTime < DOUBLE_CLICK_MS &&
-      this.lastClickedNodeId === node.id;
+    const isDouble = now - this.lastClickTime < DOUBLE_CLICK_MS && this.lastClickedNodeId === node.id;
     this.lastClickTime = now;
     this.lastClickedNodeId = node.id;
 
@@ -873,9 +880,13 @@ export class GalaxyView extends ItemView {
     const nodeRadius = Math.sqrt(node.val) * 5;
     const effectiveDist = Math.max(dist, nodeRadius * (dist <= FLY_DIST_DOUBLE ? 2 : 4));
     this.graph.cameraPosition(
-      { x: x + (dx / len) * effectiveDist, y: y + (dy / len) * effectiveDist, z: z + (dz / len) * effectiveDist },
+      {
+        x: x + (dx / len) * effectiveDist,
+        y: y + (dy / len) * effectiveDist,
+        z: z + (dz / len) * effectiveDist,
+      },
       { x, y, z },
-      duration
+      duration,
     );
   }
 
@@ -884,11 +895,7 @@ export class GalaxyView extends ItemView {
     this.hideInspector();
     this.lastClickedNodeId = null;
     if (!this.graph) return;
-    this.graph.cameraPosition(
-      { x: 0, y: 0, z: 1400 },
-      { x: 0, y: 0, z: 0 },
-      FLY_DUR_RESET
-    );
+    this.graph.cameraPosition({ x: 0, y: 0, z: 1400 }, { x: 0, y: 0, z: 0 }, FLY_DUR_RESET);
   }
 
   private showInspector(node: GNode) {
@@ -940,7 +947,13 @@ export class GalaxyView extends ItemView {
     this.showInspector(this.selectedNode);
   }
 
-  private linkNormal() { return `rgba(120,160,220,${this.plugin.settings.linkOpacityDefault})`; }
-  private linkHighlight() { return `rgba(255,160,0,${this.plugin.settings.linkOpacityHighlight})`; }
-  private linkDim() { return `rgba(60,60,60,${this.plugin.settings.linkOpacityDim})`; }
+  private linkNormal() {
+    return `rgba(120,160,220,${this.plugin.settings.linkOpacityDefault})`;
+  }
+  private linkHighlight() {
+    return `rgba(255,160,0,${this.plugin.settings.linkOpacityHighlight})`;
+  }
+  private linkDim() {
+    return `rgba(60,60,60,${this.plugin.settings.linkOpacityDim})`;
+  }
 }

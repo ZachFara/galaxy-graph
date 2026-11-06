@@ -26,7 +26,7 @@ export function buildSettingsPanel(
   panel: HTMLElement,
   plugin: SettingsPanelPlugin,
   app: App,
-  cb: SettingsPanelCallbacks
+  cb: SettingsPanelCallbacks,
 ) {
   panel.empty();
   const s = plugin.settings;
@@ -60,7 +60,7 @@ export function buildSettingsPanel(
   };
 
   const popSec = section("Popularity dimension");
-  const popOpts: Array<[GalaxySettings["popularityDimension"], string]> = [
+  const popOpts: [GalaxySettings["popularityDimension"], string][] = [
     ["ctime", "Created time (ctime)"],
     ["mtime", "Modified time (mtime)"],
     ["frontmatter", "Frontmatter field"],
@@ -73,7 +73,9 @@ export function buildSettingsPanel(
     radio.value = val;
     radio.checked = s.popularityDimension === val;
     const rowLabel = row.createEl("span", { text: lbl, cls: "galaxy-radio-label galaxy-radio-label--click" });
-    rowLabel.onclick = () => { radio.click(); };
+    rowLabel.onclick = () => {
+      radio.click();
+    };
     radio.onchange = async () => {
       if (radio.checked) {
         s.popularityDimension = val;
@@ -112,7 +114,7 @@ export function buildSettingsPanel(
   };
 
   const colSec = section("Color mapping");
-  const colOpts: Array<[GalaxySettings["colorBy"], string]> = [
+  const colOpts: [GalaxySettings["colorBy"], string][] = [
     ["folder", "By folder"],
     ["index", "By index vs normal"],
     ["tag", "By tag"],
@@ -174,7 +176,7 @@ export function buildSettingsPanel(
       };
       const removeBtn = row.createEl("button", { text: "×", cls: "galaxy-remove-btn" });
       removeBtn.onclick = async () => {
-        delete s.tagColorMap[tag];
+        s.tagColorMap = Object.fromEntries(Object.entries(s.tagColorMap).filter(([key]) => key !== tag));
         renderTagList();
         cb.refreshNodeColors();
         await save();
@@ -219,9 +221,7 @@ export function buildSettingsPanel(
       return;
     }
 
-    activeSuggestions = vaultTags
-      .filter((tag) => tag.toLowerCase().includes(query))
-      .slice(0, 8);
+    activeSuggestions = vaultTags.filter((tag) => tag.toLowerCase().includes(query)).slice(0, 8);
 
     if (activeSuggestions.length === 0) {
       hideSuggestions();
@@ -296,7 +296,9 @@ export function buildSettingsPanel(
   activitySlider.max = "365";
   activitySlider.step = "1";
   activitySlider.value = String(s.activityWindowDays);
-  const activityVal = activityWindowRow.createEl("span", { cls: "galaxy-slider-value galaxy-slider-value--right" });
+  const activityVal = activityWindowRow.createEl("span", {
+    cls: "galaxy-slider-value galaxy-slider-value--right",
+  });
   activityVal.textContent = `${s.activityWindowDays}d`;
   activitySlider.oninput = async () => {
     s.activityWindowDays = parseInt(activitySlider.value);
@@ -309,14 +311,20 @@ export function buildSettingsPanel(
 
   label(activityRow, "Leaf note heat based on:");
   const leafFieldRow = activityRow.createDiv({ cls: "galaxy-leaf-row" });
-  for (const [val, lbl] of [["mtime", "Last modified"], ["ctime", "Created"]] as const) {
+  for (const [val, lbl] of [
+    ["mtime", "Last modified"],
+    ["ctime", "Created"],
+  ] as const) {
     const optRow = leafFieldRow.createDiv({ cls: "galaxy-radio-row galaxy-radio-row--inline" });
     const radio = optRow.createEl("input");
     radio.type = "radio";
     radio.name = "leaf-date-field";
     radio.value = val;
     radio.checked = s.activityLeafDateField === val;
-    const optLabel = optRow.createEl("span", { text: lbl, cls: "galaxy-radio-label galaxy-radio-label--click" });
+    const optLabel = optRow.createEl("span", {
+      text: lbl,
+      cls: "galaxy-radio-label galaxy-radio-label--click",
+    });
     optLabel.onclick = () => radio.click();
     radio.onchange = async () => {
       if (radio.checked) {
@@ -334,7 +342,7 @@ export function buildSettingsPanel(
     key: "linkOpacityDefault" | "linkOpacityHighlight" | "linkOpacityDim" | "fogMaxOpacity",
     min = 0,
     max = 1,
-    step = 0.01
+    step = 0.01,
   ) => {
     const row = parent.createDiv({ cls: "galaxy-slider-block" });
     const labelRow = row.createDiv({ cls: "galaxy-slider-label-row" });
@@ -364,7 +372,10 @@ export function buildSettingsPanel(
   const fogCheck = fogRow.createEl("input");
   fogCheck.type = "checkbox";
   fogCheck.checked = s.fogEnabled;
-  const fogLabel = fogRow.createEl("span", { text: "Enable fog", cls: "galaxy-radio-label galaxy-radio-label--click" });
+  const fogLabel = fogRow.createEl("span", {
+    text: "Enable fog",
+    cls: "galaxy-radio-label galaxy-radio-label--click",
+  });
   fogLabel.onclick = () => fogCheck.click();
   fogCheck.onchange = async () => {
     s.fogEnabled = fogCheck.checked;
@@ -373,7 +384,10 @@ export function buildSettingsPanel(
   };
 
   const fogModeDiv = fogSec.createDiv({ cls: "galaxy-slider-block" });
-  for (const [val, lbl] of [["color", "Match index color"], ["heat", "Heat map (connections = heat)"]] as const) {
+  for (const [val, lbl] of [
+    ["color", "Match index color"],
+    ["heat", "Heat map (connections = heat)"],
+  ] as const) {
     const row = fogModeDiv.createDiv({ cls: "galaxy-radio-row" });
     const radio = row.createEl("input");
     radio.type = "radio";
@@ -403,7 +417,15 @@ export function buildSettingsPanel(
     await save();
   };
 
-  const starSlider = (parent: HTMLElement, labelText: string, key: "starCount" | "starSize" | "starBrightness", min: number, max: number, step: number, decimals: number) => {
+  const starSlider = (
+    parent: HTMLElement,
+    labelText: string,
+    key: "starCount" | "starSize" | "starBrightness",
+    min: number,
+    max: number,
+    step: number,
+    decimals: number,
+  ) => {
     const row = parent.createDiv({ cls: "galaxy-slider-block--below" });
     const labelRow = row.createDiv({ cls: "galaxy-slider-label-row" });
     labelRow.createEl("span", { text: labelText, cls: "galaxy-slider-name" });
@@ -432,7 +454,7 @@ export function buildSettingsPanel(
     parent: HTMLElement,
     labelText: string,
     key: "sphereOpacity" | "ringsOpacity" | "groundGridOpacity",
-    max = 0.3
+    max = 0.3,
   ) => {
     const row = parent.createDiv({ cls: "galaxy-slider-flex-row galaxy-slider-block" });
     row.createEl("span", { text: labelText, cls: "galaxy-slider-name galaxy-slider-name--flex" });
@@ -479,7 +501,15 @@ export function buildSettingsPanel(
   };
 
   const physicsSec = section("Physics");
-  const physicsSlider = (parent: HTMLElement, labelText: string, key: "repelForce" | "linkForce" | "linkDistance" | "centerGravity", min: number, max: number, step: number, decimals: number) => {
+  const physicsSlider = (
+    parent: HTMLElement,
+    labelText: string,
+    key: "repelForce" | "linkForce" | "linkDistance" | "centerGravity",
+    min: number,
+    max: number,
+    step: number,
+    decimals: number,
+  ) => {
     const row = parent.createDiv({ cls: "galaxy-slider-block" });
     const labelRow = row.createDiv({ cls: "galaxy-slider-label-row" });
     labelRow.createEl("span", { text: labelText, cls: "galaxy-slider-name" });

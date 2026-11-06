@@ -76,6 +76,7 @@ ln -sf "$(pwd)/main.js" "<YourVault>/.obsidian/plugins/galaxy-graph/main.js"
 ## Inspector panel
 
 Shows for the selected note:
+
 - Title (coloured by folder)
 - Out / In / Total connection counts
 - First ~200 chars of note body (frontmatter stripped)

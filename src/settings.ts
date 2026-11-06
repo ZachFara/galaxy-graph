@@ -1,17 +1,17 @@
 export interface GalaxySettings {
-  popularityDimension: 'ctime' | 'mtime' | 'frontmatter';
+  popularityDimension: "ctime" | "mtime" | "frontmatter";
   popularityFrontmatterKey: string;
   rotationSpeed: number;
-  colorBy: 'folder' | 'index' | 'tag' | 'activity';
+  colorBy: "folder" | "index" | "tag" | "activity";
   indexDegreeThreshold: number;
   tagColorMap: Record<string, string>;
   activityWindowDays: number;
-  activityLeafDateField: 'mtime' | 'ctime';
+  activityLeafDateField: "mtime" | "ctime";
   linkOpacityDefault: number;
   linkOpacityHighlight: number;
   linkOpacityDim: number;
   fogEnabled: boolean;
-  fogMode: 'color' | 'heat';
+  fogMode: "color" | "heat";
   fogMaxOpacity: number;
   topLabelCount: number;
   labelHideDistance: number;
@@ -31,19 +31,19 @@ export interface GalaxySettings {
 }
 
 export const DEFAULT_SETTINGS: GalaxySettings = {
-  popularityDimension: 'ctime',
-  popularityFrontmatterKey: 'updated',
+  popularityDimension: "ctime",
+  popularityFrontmatterKey: "updated",
   rotationSpeed: 0.001,
-  colorBy: 'folder',
+  colorBy: "folder",
   indexDegreeThreshold: 10,
   tagColorMap: {},
   activityWindowDays: 30,
-  activityLeafDateField: 'mtime',
-  linkOpacityDefault: 0.30,
-  linkOpacityHighlight: 0.90,
+  activityLeafDateField: "mtime",
+  linkOpacityDefault: 0.3,
+  linkOpacityHighlight: 0.9,
   linkOpacityDim: 0.02,
   fogEnabled: true,
-  fogMode: 'color',
+  fogMode: "color",
   fogMaxOpacity: 0.35,
   topLabelCount: 10,
   labelHideDistance: 3000,
@@ -64,7 +64,7 @@ tags:
   starSize: 1.2,
   starBrightness: 0.8,
   sphereOpacity: 0.06,
-  ringsOpacity: 0.10,
+  ringsOpacity: 0.1,
   groundGridOpacity: 0.15,
   repelForce: -30,
   linkForce: 0.5,

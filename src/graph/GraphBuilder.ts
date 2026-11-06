@@ -5,13 +5,13 @@ import { DEFAULT_COLOR, FOLDER_PALETTE } from "../utils/colors";
 export function topLevelKey(filePath: string): string {
   const slash = filePath.indexOf("/");
   if (slash === -1) return "root";
-  const match = filePath.slice(0, slash).match(/^(\d+)/);
+  const match = /^(\d+)/.exec(filePath.slice(0, slash));
   return match ? match[1] : "root";
 }
 
 // Human-readable label for a note's top-level folder, e.g. "1 - Full Notes" -> "Full Notes".
 // Falls back to the raw folder name for vaults that don't use a numeric prefix convention.
-export function topLevelFolderName(filePath: string): string {
+function topLevelFolderName(filePath: string): string {
   const slash = filePath.indexOf("/");
   if (slash === -1) return "Root";
   return filePath.slice(0, slash).replace(/^\d+\s*-\s*/, "");
@@ -37,8 +37,8 @@ export function buildGraphData(app: App): { nodes: GNode[]; links: GLink[] } {
     if (!cache) continue;
 
     const rawLinks: string[] = [];
-    for (const l of (cache.links ?? [])) rawLinks.push(l.link);
-    for (const l of (cache.frontmatterLinks ?? [])) rawLinks.push(l.link);
+    for (const l of cache.links ?? []) rawLinks.push(l.link);
+    for (const l of cache.frontmatterLinks ?? []) rawLinks.push(l.link);
 
     for (const linkStr of rawLinks) {
       const resolved = metadataCache.getFirstLinkpathDest(linkStr, file.path);
