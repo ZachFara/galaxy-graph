@@ -8,7 +8,6 @@ import type { ForceGraph3DInstance } from "3d-force-graph";
 import { buildGraphData } from "./graph/GraphBuilder";
 import type { GalaxySettings } from "./settings";
 import type { FogManager } from "./scene/FogManager";
-import type { NodeSpriteFactory } from "./scene/NodeSprites";
 import { computeActivityHeat } from "./utils/activity";
 import type { GLink, GNode } from "./types";
 import { resolveId } from "./types";
@@ -21,10 +20,10 @@ import {
   robustSphere,
   type Vec3,
 } from "./utils/camera";
-import { getNodeColor, toneByDegree } from "./utils/colors";
+import { dimNodeColor, getNodeColor } from "./utils/colors";
 import { parseTimestamp } from "./utils/dates";
 import { estimateLabelWidth, placeLabels, type LabelCandidate } from "./utils/labels";
-import { mix, readCanvasTheme, rgba, type CanvasTheme } from "./utils/theme";
+import { readCanvasTheme, rgba, type CanvasTheme } from "./utils/theme";
 import { InspectorPanel } from "./ui/InspectorPanel";
 import { buildSettingsPanel } from "./ui/SettingsPanel";
 
@@ -49,17 +48,7 @@ const FOCUS_MIN_NODE_RADII = 6;
 // Scene fog density relative to the graph's radius: the far side of the galaxy fades to
 // about half, which is the one depth cue the canvas uses.
 const FOG_DENSITY_FACTOR = 0.18;
-// Fog also follows the camera: zooming into a neighbourhood fades the galaxy behind it.
-const FOG_CAMERA_FACTOR = 0.25;
-// The selected note grows a little and brightens toward the ink; everything outside the
-// selection becomes a translucent ghost of its own colour.
-const SELECTED_SPRITE_SCALE = 1.3;
-const SELECTED_TINT = 0.35;
-const DIMMED_OPACITY = 0.2;
-// The camera may not orbit closer than this many radii of the largest hub, so a hub never
-// grows past roughly a fifth of the view and notes stay points rather than plates.
-const MIN_CAMERA_DISTANCE_RADII = 10;
-const MIN_CAMERA_DISTANCE = 60;
+const SELECTED_VAL_SCALE = 2.5;
 // Labels: hub labels are always candidates; any node whose sphere is at least this many
 // pixels across gets one too, so a neighbourhood becomes legible as you arrive.
 const LABEL_MAX = 28;
@@ -124,9 +113,6 @@ export class GalaxyView extends ItemView {
   private resizeObserver: ResizeObserver | null = null;
   private theme: CanvasTheme = { ground: "#1e1e1e", ink: "#dcddde", isDark: true };
   private sceneFog: THREE.FogExp2 | null = null;
-  private galaxyFogDensity = FOG_DENSITY_FACTOR / INITIAL_GRAPH_RADIUS;
-  private maxDegree = 1;
-  private nodeSprites: NodeSpriteFactory | null = null;
   private autoRotating = true;
   private rotationFrameId: number | null = null;
   private rotateBtnEl: HTMLElement | null = null;
@@ -173,7 +159,6 @@ export class GalaxyView extends ItemView {
       import("three"),
       import("3d-force-graph"),
       import("./scene/FogManager"),
-      import("./scene/NodeSprites"),
     ]);
 
     this.theme = this.readTheme();
@@ -189,7 +174,6 @@ export class GalaxyView extends ItemView {
     const data = buildGraphData(this.app);
     this.graphData = data;
     this.fullGraphData = data;
-    this.maxDegree = data.nodes.reduce((m, n) => Math.max(m, n.degree), 1);
     if (this.plugin.settings.colorBy === "activity") {
       computeActivityHeat(this.app, data.nodes, this.plugin.settings);
     }
@@ -225,10 +209,9 @@ export class GalaxyView extends ItemView {
       new Notice(`Galaxy Graph: ${data.nodes.length} nodes detected. Rendering may be slow.`, 6000);
     }
 
-    const [threeMod, forceGraphMod, fogManagerMod, nodeSpritesMod] = await depsPromise;
+    const [threeMod, forceGraphMod, fogManagerMod] = await depsPromise;
     this.THREE = threeMod;
     this.ForceGraph3DCtor = forceGraphMod.default as unknown as GalaxyGraphCtor;
-    this.nodeSprites = new nodeSpritesMod.NodeSpriteFactory();
 
     window.setTimeout(() => {
       this.initGraph();
@@ -264,8 +247,6 @@ export class GalaxyView extends ItemView {
     if (this.graph) {
       this.fogManager?.dispose();
       this.fogManager = null;
-      this.nodeSprites?.dispose();
-      this.nodeSprites = null;
       try {
         this.graph.pauseAnimation();
       } catch {
@@ -373,8 +354,12 @@ export class GalaxyView extends ItemView {
       .backgroundColor(this.theme.ground)
       .graphData(this.graphData)
       .nodeId("id")
-      // The hover tooltip only for notes that do not already carry a label pill.
-      .nodeLabel((n: GNode) => (this.labelPool.has(n.id) ? "" : n.name))
+      .nodeLabel("name")
+      .nodeVal((n: GNode) => this.nodeValFor(n))
+      .nodeRelSize(NODE_REL_SIZE)
+      .nodeOpacity(0.92)
+      .nodeResolution(16)
+      .nodeColor((n: GNode) => this.nodeColorFor(n))
       .linkColor((l: GLink) => this.linkColorFor(l))
       .linkWidth(0)
       .linkOpacity(1.0)
@@ -392,8 +377,7 @@ export class GalaxyView extends ItemView {
       })
       .onBackgroundClick(() => this.clearSelection());
 
-    this.applyNodeStyle();
-    this.sceneFog = new three.FogExp2(this.theme.ground, this.galaxyFogDensity);
+    this.sceneFog = new three.FogExp2(this.theme.ground, FOG_DENSITY_FACTOR / INITIAL_GRAPH_RADIUS);
     this.graph.scene().fog = this.sceneFog;
 
     // 3d-force-graph kicks off its internal render loop synchronously on construction (via
@@ -414,11 +398,6 @@ export class GalaxyView extends ItemView {
 
   private onSimulationSettled() {
     if (!this.graph) return;
-    const controls = this.graph.controls() as { minDistance?: number };
-    controls.minDistance = Math.max(
-      MIN_CAMERA_DISTANCE,
-      nodeRadius(this.maxDegree, NODE_REL_SIZE) * MIN_CAMERA_DISTANCE_RADII,
-    );
     this.updateSceneFog();
     this.rebuildFog();
     this.rebuildLabels();
@@ -453,8 +432,7 @@ export class GalaxyView extends ItemView {
   private updateSceneFog() {
     if (!this.sceneFog) return;
     const radius = Math.max(this.graphSphere()?.radius ?? 0, 200);
-    this.galaxyFogDensity = FOG_DENSITY_FACTOR / radius;
-    this.sceneFog.density = this.galaxyFogDensity;
+    this.sceneFog.density = FOG_DENSITY_FACTOR / radius;
     this.sceneFog.color.set(this.theme.ground);
   }
 
@@ -488,23 +466,9 @@ export class GalaxyView extends ItemView {
       }
 
       this.fogManager?.syncFogPositions(this.graphData.nodes);
-      this.followCamera();
       this.updateLabelOverlay();
     };
     this.rotationFrameId = window.requestAnimationFrame(tick);
-  }
-
-  /** Depth cues that scale with where the camera is: fog density and cloud dissolve. */
-  private followCamera() {
-    if (!this.graph) return;
-    const camera = this.graph.camera();
-    const controls = this.graph.controls() as { target?: THREE.Vector3 } | null;
-    const target = controls?.target;
-    const camDist = target ? camera.position.distanceTo(target) : camera.position.length();
-    if (this.sceneFog) {
-      this.sceneFog.density = Math.max(this.galaxyFogDensity, FOG_CAMERA_FACTOR / Math.max(camDist, 1));
-    }
-    this.fogManager?.updateCamera(camera.position);
   }
 
   private toggleRotation() {
@@ -768,9 +732,7 @@ export class GalaxyView extends ItemView {
           hasActive = true;
         }
       }
-      for (const state of this.spawnAnimations.values()) {
-        this.nodeSprites?.scaleTo(state.node.id, nodeRadius(state.node.val, NODE_REL_SIZE));
-      }
+      this.refreshNodeSizes();
       if (hasActive || this.spawnAnimations.size > 0) {
         this.spawnAnimationFrameId = window.requestAnimationFrame(step);
       } else {
@@ -932,6 +894,7 @@ export class GalaxyView extends ItemView {
     }
     this.fogManager?.setFocus(node.id);
     this.refreshNodeColors();
+    this.refreshNodeSizes();
     this.refreshLinkColors();
   }
 
@@ -941,6 +904,7 @@ export class GalaxyView extends ItemView {
     this.selectedNode = null;
     this.fogManager?.setFocus(null);
     this.refreshNodeColors();
+    this.refreshNodeSizes();
     this.refreshLinkColors();
   }
 
@@ -1005,29 +969,15 @@ export class GalaxyView extends ItemView {
 
   // ---- Colour accessors ------------------------------------------------------------
 
-  private ownColorFor(n: GNode): string {
-    const base = getNodeColor(n, this.plugin.settings, this.theme.isDark);
-    return toneByDegree(base, n.degree, this.maxDegree, this.theme.ink);
+  private nodeColorFor(n: GNode): string {
+    const own = getNodeColor(n, this.plugin.settings, this.theme.isDark);
+    if (this.highlightNodes.size === 0 || this.highlightNodes.has(n.id)) return own;
+    return dimNodeColor(this.theme.ink);
   }
 
-  private isDimmed(n: GNode): boolean {
-    return this.highlightNodes.size > 0 && !this.highlightNodes.has(n.id);
-  }
-
-  /** Every note is a soft sprite: its own colour, toned by degree, ghosted outside a selection. */
-  private applyNodeStyle() {
-    const factory = this.nodeSprites;
-    if (!this.graph || !factory) return;
-    factory.reset();
-    this.graph.nodeThreeObject((n: GNode) => {
-      const isSelected = this.selectedNode?.id === n.id;
-      const radius =
-        nodeRadius(this.getAnimatedNodeVal(n), NODE_REL_SIZE) * (isSelected ? SELECTED_SPRITE_SCALE : 1);
-      const color = isSelected
-        ? mix(this.ownColorFor(n), this.theme.ink, SELECTED_TINT)
-        : this.ownColorFor(n);
-      return factory.make(n.id, color, radius, this.isDimmed(n) ? DIMMED_OPACITY : 1);
-    });
+  private nodeValFor(n: GNode): number {
+    const v = this.getAnimatedNodeVal(n);
+    return this.selectedNode?.id === n.id ? v * SELECTED_VAL_SCALE : v;
   }
 
   private linkColorFor(l: GLink): string {
@@ -1041,8 +991,13 @@ export class GalaxyView extends ItemView {
   }
 
   private refreshNodeColors() {
-    this.applyNodeStyle();
+    if (!this.graph) return;
+    this.graph.nodeColor((n: GNode) => this.nodeColorFor(n));
     this.updateLabelOverlay();
+  }
+
+  private refreshNodeSizes() {
+    this.graph?.nodeVal((n: GNode) => this.nodeValFor(n));
   }
 
   private refreshLinkColors() {

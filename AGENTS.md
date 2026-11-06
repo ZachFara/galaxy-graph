@@ -89,10 +89,6 @@ builds and attaches the three release assets.
   `linkWidth(0)` draws lines (any width draws cylinders); link and node opacity are
   multiplied by the alpha of an `rgba()` colour string; the hover tooltip is a `.scene-tooltip`
   element restyled in `styles.css`.
-- Notes are custom sprites (`nodeThreeObject`), so the library's `nodeColor` / `nodeVal`
-  accessors do nothing: colour, size and dimming live in `applyNodeStyle`, which rebuilds
-  every sprite. Per-frame size changes go through `NodeSpriteFactory.scaleTo`, never a
-  rebuild. The owner rejected glow halos and selection rings; keep discs flat.
 - Framing uses `robustSphere` (centroid + 90th-percentile radius) over connected nodes only;
   `boundingSphere` would let the orphans at the periphery shrink the whole galaxy.
 - npm 11 may refuse esbuild's postinstall script on some machines; the build still
