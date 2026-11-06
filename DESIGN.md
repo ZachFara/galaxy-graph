@@ -33,6 +33,10 @@ inspector).
 - **Vaults of a few thousand notes must stay usable.** Degree, colour and activity
   heat are computed once per graph build, not per frame. The render loop pauses when
   the view is not the active leaf.
+- **The canvas follows the user's theme.** Every colour the scene draws is derived from
+  `--background-primary` and `--text-normal` (see `src/utils/theme.ts`) and refreshed on
+  the workspace `css-change` event. The plugin ships no colour of its own except the two
+  folder palettes (light tints for dark grounds, deeper tones for light grounds).
 - **`minAppVersion` is 1.7.2.** Only public Obsidian API may be used, with one
   documented exception: `vault.getConfig("userIgnoreFilters")` for the "Excluded
   files" setting (planned, see PROGRESS.md).
@@ -48,14 +52,16 @@ src/
   graph/               vault -> graph data. Pure data, no three.js, no DOM.
     GraphBuilder.ts    buildGraphData(app): nodes + links + degree + folder keys
   scene/               pure three.js objects. No Obsidian imports, no UI.
-    FogManager.ts      hub fog sprites, position sync, disposal
-    SphereGrid.ts      HUD sphere, depth rings, ground grid, starfield
-    dispose.ts         shared geometry/material disposal helpers
+    FogManager.ts      neighbourhood clouds: one sprite per hub, sized to its neighbours
+    dispose.ts         shared geometry/material disposal helper
   ui/                  Obsidian DOM panels. No three.js, no scene.
     InspectorPanel.ts  selected-note details, local galaxy, sparkline, "add note to index"
     SettingsPanel.ts   slide-in settings UI; writes plugin.settings, calls back into the view
   utils/               small pure helpers usable by every layer above
-    colors.ts          palettes, heat colours, getNodeColor
+    theme.ts           CanvasTheme from CSS variables; colour parsing, mixing, alpha
+    colors.ts          themed folder palettes, heat ramps, getNodeColor, dimNodeColor
+    camera.ts          bounding/robust spheres, fit distances, cloud radius (pure maths)
+    labels.ts          greedy label placement
     activity.ts        activity-heat computation
     dates.ts           parseTimestamp
 tests/                 vitest unit tests (pure modules; see decision 0002 for the obsidian stub plan)
@@ -91,13 +97,42 @@ modules; the layout check in `scripts/check-layout.mjs` rejects anything else.
 3. `computeActivityHeat` annotates nodes when the activity colour mode is on.
 4. The 3d-force-graph instance is created with the data; accessors read `GNode`
    fields and `GalaxySettings` for size, colour, opacity.
-5. After the simulation settles, `scene/` builds the grid sphere, starfield, fog and
-   labels from node positions.
+5. After the simulation settles (~3 s), the view sets the scene-fog density from the
+   galaxy's radius, builds the neighbourhood clouds from node positions and links, computes
+   the hub labels, and frames the whole galaxy.
 6. User input (clicks, settings changes, timeline) mutates view state and calls
    narrow update methods (`refreshNodeColors`, `rebuildFog`, `rebuildLabels`,
    `updateGridOpacities`) rather than rebuilding the graph.
 7. Settings changes are deep-merged with `DEFAULT_SETTINGS` and persisted through
    `plugin.saveData`.
+
+## Visual language
+
+The canvas is a nebula, not a space scene: the only atmosphere is the one the data makes.
+
+- **No ornaments.** No grids, rings, wireframe spheres or starfields. Depth is conveyed by
+  exponential scene fog in the ground colour (density ≈ 0.18 / galaxy radius) plus node
+  size attenuation. The empty canvas is the plain ground.
+- **Neighbourhood clouds** are the signature element. Each hub (degree ≥ the index
+  threshold) gets one soft sprite with a gaussian falloff, radius = 75th percentile of its
+  neighbours' distances × 1.35 (capped at 35% of the galaxy radius), colour = the hub's own
+  colour in the active colour mode. Additive on dark grounds, normal-blended and slightly
+  darkened on light grounds. While a note is selected, every cloud but the selected hub's
+  recedes to 40%.
+- **Nodes and links.** Node colour by the active mode; links are lines in the ink colour at
+  the configured opacity. Selection keeps colours: the selected note grows, its links take
+  its colour, everything else dims to ink at 12%.
+- **Camera.** Reset frames the connected body of the galaxy (90th-percentile radius) at 85%
+  of the view from 18° elevation. Focus frames a note plus its neighbours at 60% of the
+  view, clamped so the hub never exceeds 8% of the view height. Single click never moves the
+  camera. Auto-rotation orbits the current target slowly (one turn per five minutes).
+- **Labels.** Theme-coloured pills with the node's colour dot. The top-N hubs are always
+  candidates; any node whose sphere projects to ≥ 7 px is a candidate too, so a neighbourhood
+  becomes legible on arrival. Placement is greedy by priority with overlap rejection, capped
+  at 28, and keeps clear of the top bar. Pills are clickable.
+- **Chrome.** Obsidian's type scale (12/13/15), sentence case, native controls. One accent
+  per panel: the selected note's colour on the inspector title, badge and chart. Toggle
+  buttons show state by inversion (ink fill, ground text), never by text.
 
 ## Untrusted data
 
@@ -111,4 +146,5 @@ are rendered through Obsidian's DOM helpers (`createEl`, `setText`), never as HT
 - Obsidian's "Files and links → Excluded files" setting is not yet honoured.
 - Automated test coverage exists only for pure helpers; modules that import Obsidian
   values at runtime need a test stub before they can be unit-tested.
-- Two functions exceed the target size limits and are covered by ratchet tasks.
+- Clouds are capped in world units, not screen pixels, so a cloud can still fill the view
+  when the camera is inside a neighbourhood.

@@ -83,6 +83,14 @@ builds and attaches the three release assets.
   `Array.prototype.at`, `Object.fromEntries`, `??=` are fine.
 - `main.js` is a gitignored build artifact (decision 0006). `npm run build` creates it;
   the release workflow attaches it to GitHub releases. Prettier, ESLint and `tsc` ignore it.
+- The canvas re-themes on the workspace `css-change` event; never cache a colour outside
+  `CanvasTheme`. Light/dark is decided by the ground colour's luminance, not the body class.
+- 3d-force-graph facts the code relies on: node sphere radius is `cbrt(val) × nodeRelSize`;
+  `linkWidth(0)` draws lines (any width draws cylinders); link and node opacity are
+  multiplied by the alpha of an `rgba()` colour string; the hover tooltip is a `.scene-tooltip`
+  element restyled in `styles.css`.
+- Framing uses `robustSphere` (centroid + 90th-percentile radius) over connected nodes only;
+  `boundingSphere` would let the orphans at the periphery shrink the whole galaxy.
 - npm 11 may refuse esbuild's postinstall script on some machines; the build still
   works because esbuild falls back to the platform package. If `npm run build` fails
   with a binary mismatch, run `npm rebuild esbuild`.

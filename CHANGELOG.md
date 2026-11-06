@@ -1,5 +1,21 @@
 # Changelog
 
+## [Unreleased] — Visual redesign
+
+### Changed
+- **The canvas follows the Obsidian theme.** Ground, links, dimmed nodes, label pills and cloud blending are all derived from the active theme's colours and update live when the theme or a snippet changes. Light grounds get deeper folder tones.
+- **Depth comes from scene fog, not ornaments.** The wireframe spheres, concentric rings with tick marks, ground grid and starfield are gone; distant notes and links fade toward the ground colour instead.
+- **Neighbourhood clouds** are sized to the spatial extent of a hub's neighbours (not its link count), tinted with the hub's colour in the active colour mode, fall off smoothly, glow additively on dark grounds and wash normally on light ones, and recede while another note is selected.
+- **Camera.** A single click selects a note and opens the inspector without moving the camera. Double-click, a label click, or a link in the inspector frames the note's neighbourhood and never comes closer than where the hub would fill 8% of the view. *Reset view* frames the whole galaxy from 18° above its equator (ignoring orphans drifting at the periphery). Clicking the background only clears the selection.
+- **Links** are drawn as lines rather than tubes. Highlighted links take the selected note's own colour; the selected note keeps its colour and grows instead of being recoloured to the theme accent.
+- **Labels** are theme-aware pills that avoid overlapping, appear for nearby notes as you zoom in, and can be clicked to travel to that note.
+- **Chrome.** Top-bar toggles show a pressed state instead of "ON/OFF" text; icons come from Obsidian's icon set; the inspector and settings rail use Obsidian's type scale and native controls with one accent per panel (the selected note's colour); the tag-colour list is capped with a *Show all* control.
+
+### Removed
+- Settings for the starfield (count, size, brightness), sphere / ring / ground-grid opacity and click zoom distance. Stale keys are dropped from saved data on load.
+
+---
+
 ## [1.0.1] — Store Review Fixes (current)
 
 ### Fixed
