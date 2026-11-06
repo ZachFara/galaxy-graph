@@ -32,7 +32,7 @@ export const DEFAULT_SETTINGS: GalaxySettings = {
   activityWindowDays: 30,
   activityLeafDateField: "mtime",
   linkOpacityDefault: 0.25,
-  linkOpacityHighlight: 0.9,
+  linkOpacityHighlight: 0.55,
   linkOpacityDim: 0.02,
   fogEnabled: true,
   fogMode: "color",

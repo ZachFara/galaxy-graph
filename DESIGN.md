@@ -110,22 +110,30 @@ modules; the layout check in `scripts/check-layout.mjs` rejects anything else.
 
 The canvas is a nebula, not a space scene: the only atmosphere is the one the data makes.
 
-- **No ornaments.** No grids, rings, wireframe spheres or starfields. Depth is conveyed by
-  exponential scene fog in the ground colour (density ≈ 0.18 / galaxy radius) plus node
-  size attenuation. The empty canvas is the plain ground.
+- **No ornaments.** No grids, rings, wireframe spheres, starfields or glows. Depth is
+  conveyed by exponential scene fog in the ground colour (density ≈ 0.18 / galaxy radius,
+  rising to 0.25 / camera distance as you zoom in so the galaxy behind a neighbourhood
+  recedes) plus node size attenuation. The empty canvas is the plain ground.
 - **Neighbourhood clouds** are the signature element. Each hub (degree ≥ the index
   threshold) gets one soft sprite with a gaussian falloff, radius = 75th percentile of its
   neighbours' distances × 1.35 (capped at 35% of the galaxy radius), colour = the hub's own
   colour in the active colour mode. Additive on dark grounds, normal-blended and slightly
   darkened on light grounds. While a note is selected, every cloud but the selected hub's
-  recedes to 40%.
-- **Nodes and links.** Node colour by the active mode; links are lines in the ink colour at
-  the configured opacity. Selection keeps colours: the selected note grows, its links take
-  its colour, everything else dims to ink at 12%.
+  recedes to 40%, and any cloud dissolves as the camera comes within 1–2.5 cloud radii:
+  once you are inside the weather it stops tinting everything.
+- **Nodes and links.** A note is a flat, soft-edged disc facing the camera (a sprite), never
+  a shaded sphere and never a glow: radius = cbrt(degree) × 5. Within one hue, tone varies by
+  degree on a log scale: hubs vivid, leaves shifted up to 35% toward the ink, so a cluster
+  reads as a population with structure on either theme. Links are lines in the ink colour
+  at the configured opacity. Selection keeps colours: the selected note grows 1.3× and
+  brightens toward the ink, its links take its colour at the highlight opacity, everything
+  else becomes a translucent ghost of its own colour (20%).
 - **Camera.** Reset frames the connected body of the galaxy (90th-percentile radius) at 85%
   of the view from 18° elevation. Focus frames a note plus its neighbours at 60% of the
-  view, clamped so the hub never exceeds 8% of the view height. Single click never moves the
-  camera. Auto-rotation orbits the current target slowly (one turn per five minutes).
+  view, clamped so the hub never exceeds 8% of the view height. The orbit controls cannot
+  come closer than ten radii of the largest hub, so no note ever becomes a plate. Single
+  click never moves the camera. Auto-rotation orbits the current target slowly (one turn per
+  five minutes).
 - **Labels.** Theme-coloured pills with the node's colour dot. The top-N hubs are always
   candidates; any node whose sphere projects to ≥ 7 px is a candidate too, so a neighbourhood
   becomes legible on arrival. Placement is greedy by priority with overlap rejection, capped
