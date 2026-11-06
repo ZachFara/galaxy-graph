@@ -1,6 +1,6 @@
 import type { GalaxySettings } from "../settings";
 import type { GNode } from "../types";
-import { rgba } from "./theme";
+import { mix } from "./theme";
 
 // Two folder palettes: lighter tints read on dark grounds, deeper tones on light grounds.
 const FOLDER_PALETTE_DARK: Record<string, string> = {
@@ -22,7 +22,7 @@ const FOLDER_PALETTE_LIGHT: Record<string, string> = {
   root: "#f9a825",
 };
 const INDEX_ACCENT = { dark: "#ff9800", light: "#e65100" };
-const DIM_NODE_ALPHA = 0.12;
+const TONE_STRENGTH = 0.35;
 
 function folderPalette(isDark: boolean): Record<string, string> {
   return isDark ? FOLDER_PALETTE_DARK : FOLDER_PALETTE_LIGHT;
@@ -32,9 +32,15 @@ function defaultNodeColor(isDark: boolean): string {
   return folderPalette(isDark)["1"];
 }
 
-/** Colour for everything outside the current selection. */
-export function dimNodeColor(ink: string): string {
-  return rgba(ink, DIM_NODE_ALPHA);
+/**
+ * Tonal variety inside one hue: hubs stay vivid, leaves shift toward the ink (pastel on a
+ * dark ground, deeper on a light one), on a log scale so sub-hubs still read as structure
+ * inside a big cluster. Shifting toward the ink keeps leaves visible on either theme.
+ */
+export function toneByDegree(color: string, degree: number, maxDegree: number, ink: string): string {
+  const span = Math.log1p(Math.max(1, maxDegree));
+  const t = 1 - Math.min(1, Math.log1p(Math.max(0, degree)) / span);
+  return mix(color, ink, TONE_STRENGTH * t);
 }
 
 /** Cool-to-warm ramp by degree, used for the cloud heat mode. */
