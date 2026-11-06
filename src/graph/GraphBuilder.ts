@@ -1,6 +1,5 @@
 import type { App } from "obsidian";
 import type { GLink, GNode } from "../types";
-import { DEFAULT_COLOR, FOLDER_PALETTE } from "../utils/colors";
 
 export function topLevelKey(filePath: string): string {
   const slash = filePath.indexOf("/");
@@ -66,7 +65,6 @@ export function buildGraphData(app: App): { nodes: GNode[]; links: GLink[] } {
       id: f.path,
       name: f.basename,
       val: Math.max(1, deg),
-      color: FOLDER_PALETTE[folder] ?? DEFAULT_COLOR,
       folder,
       folderName: topLevelFolderName(f.path),
       filePath: f.path,

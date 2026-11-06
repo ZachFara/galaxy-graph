@@ -1,4 +1,4 @@
-import { ItemView, Notice, TFile, WorkspaceLeaf } from "obsidian";
+import { ItemView, Notice, TFile, WorkspaceLeaf, setIcon } from "obsidian";
 // three.js and 3d-force-graph are the bulk of this plugin's bundle size.
 // They're dynamically imported in onOpen() instead of statically here, so their
 // (expensive) module evaluation only happens when the Galaxy Graph view is actually
@@ -11,20 +11,51 @@ import type { FogManager } from "./scene/FogManager";
 import { computeActivityHeat } from "./utils/activity";
 import type { GLink, GNode } from "./types";
 import { resolveId } from "./types";
-import { DIM_NODE, getNodeColor } from "./utils/colors";
+import {
+  boundingSphere,
+  elevatedDirection,
+  fitDistance,
+  minDistanceForApparentFraction,
+  nodeRadius,
+  robustSphere,
+  type Vec3,
+} from "./utils/camera";
+import { dimNodeColor, getNodeColor } from "./utils/colors";
 import { parseTimestamp } from "./utils/dates";
+import { estimateLabelWidth, placeLabels, type LabelCandidate } from "./utils/labels";
+import { readCanvasTheme, rgba, type CanvasTheme } from "./utils/theme";
 import { InspectorPanel } from "./ui/InspectorPanel";
 import { buildSettingsPanel } from "./ui/SettingsPanel";
 
 export const VIEW_TYPE_GALAXY = "galaxy-graph";
 const MAX_NODES_WARN = 2000;
 const DOUBLE_CLICK_MS = 280;
-const FLY_DIST_DOUBLE = 150;
-const FLY_DUR_SINGLE = 800;
-const FLY_DUR_DOUBLE = 600;
-const FLY_DUR_RESET = 1500;
+const FLY_DUR_FOCUS = 700;
+const FLY_DUR_RESET = 1200;
 const ROT_RAD_PER_MS = (2 * Math.PI) / (5 * 60 * 1000);
 const SPAWN_ANIMATION_MS = 400;
+const SETTLE_MS = 3000;
+const NODE_REL_SIZE = 5;
+const INITIAL_CAMERA_Z = 1400;
+const INITIAL_GRAPH_RADIUS = 600;
+// Camera framing: the whole graph fills ~62% of the view from 18° above its equator,
+// a focused neighbourhood fills ~60%, and a hub never grows past 8% of the view height.
+const CAMERA_ELEVATION_DEG = 18;
+const FRAME_FILL = 0.85;
+const FOCUS_FILL = 0.6;
+const MAX_HUB_FRACTION = 0.08;
+const FOCUS_MIN_NODE_RADII = 6;
+// Scene fog density relative to the graph's radius: the far side of the galaxy fades to
+// about half, which is the one depth cue the canvas uses.
+const FOG_DENSITY_FACTOR = 0.18;
+const SELECTED_VAL_SCALE = 2.5;
+// Labels: hub labels are always candidates; any node whose sphere is at least this many
+// pixels across gets one too, so a neighbourhood becomes legible as you arrive.
+const LABEL_MAX = 28;
+const LABEL_NEAR_PX = 7;
+const LABEL_HEIGHT = 22;
+const LABEL_GAP = 4;
+const TOPBAR_BAND_PX = 48;
 
 interface GalaxyPluginLike {
   settings: GalaxySettings;
@@ -50,6 +81,16 @@ interface ForceLike {
   distance?: (v: number) => ForceLike;
 }
 
+type Mutable = GNode & { vx?: number; vy?: number; vz?: number };
+
+const toVec = (n: GNode): Vec3 => ({ x: n.x ?? 0, y: n.y ?? 0, z: n.z ?? 0 });
+const isPositioned = (n: GNode) => n.x != null && n.y != null && n.z != null;
+
+function setPressed(el: HTMLElement, on: boolean) {
+  el.toggleClass("is-on", on);
+  el.setAttribute("aria-pressed", String(on));
+}
+
 export class GalaxyView extends ItemView {
   constructor(
     leaf: WorkspaceLeaf,
@@ -70,15 +111,13 @@ export class GalaxyView extends ItemView {
   private inspectorPanel: InspectorPanel | null = null;
   private graphContainer: HTMLElement | null = null;
   private resizeObserver: ResizeObserver | null = null;
-  private themeAccent = "#7c5cbf";
-  private themeBg = "#000b1a";
+  private theme: CanvasTheme = { ground: "#1e1e1e", ink: "#dcddde", isDark: true };
+  private sceneFog: THREE.FogExp2 | null = null;
   private autoRotating = true;
   private rotationFrameId: number | null = null;
   private rotateBtnEl: HTMLElement | null = null;
   private showOrphans = true;
   private orphanBtnEl: HTMLElement | null = null;
-  private hudGroup: THREE.Group | null = null;
-  private gridGroup: THREE.Group | null = null;
   private fogManager: FogManager | null = null;
   private settingsPanelEl: HTMLElement | null = null;
   private savedEl: HTMLElement | null = null;
@@ -90,17 +129,17 @@ export class GalaxyView extends ItemView {
   private timelineSpeed = 1;
   private timelineDateEl: HTMLElement | null = null;
   private timelineSpeedBar: HTMLElement | null = null;
+  private timelineSpeedButtons = new Map<number, HTMLElement>();
   private timelineTimeoutId: number | null = null;
   private labelOverlayEl: HTMLElement | null = null;
+  private labelPool = new Map<string, HTMLElement>();
   private topLabelNodes: GNode[] = [];
-  private starsObject: THREE.Points | null = null;
   private spawnAnimations = new Map<string, SpawnAnimationState>();
   private spawnAnimationFrameId: number | null = null;
 
   // Populated once the lazily-loaded three.js / 3d-force-graph modules resolve (see onOpen).
   private THREE: typeof import("three") | null = null;
   private ForceGraph3DCtor: GalaxyGraphCtor | null = null;
-  private sphereGridMod: typeof import("./scene/SphereGrid") | null = null;
 
   override getViewType() {
     return VIEW_TYPE_GALAXY;
@@ -120,104 +159,17 @@ export class GalaxyView extends ItemView {
       import("three"),
       import("3d-force-graph"),
       import("./scene/FogManager"),
-      import("./scene/SphereGrid"),
     ]);
 
-    const style = activeWindow.getComputedStyle(activeDocument.body);
-    const cssVar = (v: string, fb: string) => style.getPropertyValue(v).trim() || fb;
-    this.themeAccent = cssVar("--interactive-accent", "#7c5cbf");
-    this.themeBg = cssVar("--background-primary", "#000b1a");
+    this.theme = this.readTheme();
 
     const root = this.contentEl;
     root.empty();
     root.addClass("galaxy-view-root");
-
     this.graphContainer = root.createDiv({ cls: "galaxy-canvas" });
-
-    this.labelOverlayEl = root.createDiv();
-    this.labelOverlayEl.id = "galaxy-labels-overlay";
-    this.labelOverlayEl.className = "galaxy-labels-overlay";
-
-    const bar = root.createDiv({ cls: "galaxy-topbar" });
-
-    const btn = (text: string) => bar.createEl("button", { text, cls: "galaxy-topbar-btn" });
-
-    btn("Reset view").onclick = () => this.resetView();
-
-    this.rotateBtnEl = btn("Rotate: ON");
-    this.rotateBtnEl.onclick = () => this.toggleRotation();
-
-    this.orphanBtnEl = btn("Orphans: ON");
-    this.orphanBtnEl.onclick = () => this.toggleOrphans();
-
-    const gearBtn = btn("⚙");
-    gearBtn.title = "Settings";
-    gearBtn.onclick = () => this.openSettingsPanel();
-
-    this.timelineBtnEl = btn("Timeline: OFF");
-    this.timelineBtnEl.onclick = () => this.toggleTimeline();
-
-    this.timelineSpeedBar = bar.createDiv({ cls: "galaxy-timeline-speedbar" });
-    for (const spd of [0.5, 1, 2, 4]) {
-      const sBtn = this.timelineSpeedBar.createEl("button", {
-        text: `${spd}x`,
-        cls: "galaxy-topbar-btn galaxy-topbar-btn--small",
-      });
-      sBtn.onclick = () => {
-        this.timelineSpeed = spd;
-        if (this.timelineActive) {
-          this.stopTimeline();
-          this.startTimeline();
-        }
-      };
-    }
-
-    this.timelineDateEl = bar.createEl("span", { cls: "galaxy-timeline-date" });
-
-    const countLabel = bar.createEl("span", { cls: "galaxy-count-label" });
-
-    this.settingsPanelEl = root.createDiv({ cls: "galaxy-settings-panel" });
-    buildSettingsPanel(this.settingsPanelEl, this.plugin, this.app, {
-      closeSettingsPanel: () => this.closeSettingsPanel(),
-      refreshNodeColors: () => this.refreshNodeColors(),
-      refreshLinkColors: () => this.refreshLinkColors(),
-      rebuildFog: () => this.rebuildFog(),
-      rebuildLabels: () => this.rebuildLabels(),
-      refreshSparklineIfSelected: () => this.refreshSparklineIfSelected(),
-      updateGridOpacities: () => this.updateGridOpacities(),
-      toggleStars: (enabled) => this.toggleStars(enabled),
-      rebuildStars: () => this.rebuildStars(),
-      refreshForces: () => this.refreshForces(),
-      recomputeActivityHeat: () => this.recomputeActivityHeat(),
-      flashSaved: () => this.flashSaved(),
-      setSavedEl: (el) => {
-        this.savedEl = el;
-      },
-    });
-
-    this.inspectorEl = root.createDiv({ cls: "galaxy-inspector" });
-
-    this.inspectorPanel = new InspectorPanel(
-      this.inspectorEl,
-      this.app,
-      () => this.plugin.settings,
-      () => this.graphData,
-      {
-        updateHighlight: (node) => this.updateHighlight(node),
-        flyToNode: (node, dist, duration) => this.flyToNode(node, dist, duration),
-        clearHighlight: () => this.clearHighlight(),
-        refreshGraphData: () => buildGraphData(this.app),
-        updateGraphData: (data) => {
-          this.graphData = data;
-          this.fullGraphData = data;
-        },
-        graphInstance: () => this.graph,
-        rebuildFog: () => this.rebuildFog(),
-        rebuildLabels: () => this.rebuildLabels(),
-      },
-      () => this.plugin.settings.clickFlyDistance,
-      FLY_DUR_SINGLE,
-    );
+    this.labelOverlayEl = root.createDiv({ cls: "galaxy-labels-overlay" });
+    const countLabel = this.buildTopBar(root);
+    this.buildPanels(root);
 
     const data = buildGraphData(this.app);
     this.graphData = data;
@@ -225,7 +177,6 @@ export class GalaxyView extends ItemView {
     if (this.plugin.settings.colorBy === "activity") {
       computeActivityHeat(this.app, data.nodes, this.plugin.settings);
     }
-
     const orphanCount = data.nodes.filter((n) => n.degree === 0).length;
     countLabel.textContent =
       `${data.nodes.length} notes · ${data.links.length} links` +
@@ -243,7 +194,6 @@ export class GalaxyView extends ItemView {
       },
       { capture: true },
     );
-
     this.registerEvent(
       this.app.workspace.on("active-leaf-change", (leaf) => {
         this.tabVisible = leaf === this.leaf;
@@ -253,86 +203,48 @@ export class GalaxyView extends ItemView {
         }
       }),
     );
+    this.registerEvent(this.app.workspace.on("css-change", () => this.applyTheme()));
 
     if (data.nodes.length > MAX_NODES_WARN) {
       new Notice(`Galaxy Graph: ${data.nodes.length} nodes detected. Rendering may be slow.`, 6000);
     }
 
-    const [threeMod, forceGraphMod, fogManagerMod, sphereGridMod] = await depsPromise;
+    const [threeMod, forceGraphMod, fogManagerMod] = await depsPromise;
     this.THREE = threeMod;
     this.ForceGraph3DCtor = forceGraphMod.default as unknown as GalaxyGraphCtor;
-    this.sphereGridMod = sphereGridMod;
 
     window.setTimeout(() => {
       this.initGraph();
-      this.graph?.d3AlphaDecay(0.02);
-      const renderer = this.graph?.renderer();
-      if (renderer) renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
-      const scene = this.graph?.scene() ?? null;
-      if (scene) {
-        this.hudGroup = sphereGridMod.buildHUDSphere(scene);
-        this.fogManager = new fogManagerMod.FogManager(scene);
-        if (this.plugin.settings.showStars) {
-          const s = this.plugin.settings;
-          this.starsObject = sphereGridMod.buildStarfield(
-            scene,
-            800,
-            s.starCount,
-            s.starSize,
-            s.starBrightness,
-          );
-        }
-      }
+      const graph = this.graph;
+      if (!graph) return;
+      graph.d3AlphaDecay(0.02);
+      graph.renderer().setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+      this.fogManager = new fogManagerMod.FogManager(graph.scene());
       this.startRotationLoop();
       this.attachResizeObserver();
-      window.setTimeout(() => {
-        if (this.graph) {
-          this.gridGroup = sphereGridMod.buildGridSphere(
-            this.graph.scene(),
-            this.graphData.nodes,
-            this.gridGroup,
-          );
-          this.updateGridOpacities();
-          this.rebuildFog();
-          this.rebuildLabels();
-        }
-      }, 3000);
+      window.setTimeout(() => this.onSimulationSettled(), SETTLE_MS);
     }, 50);
   }
 
   override onClose(): Promise<void> {
     this.resizeObserver?.disconnect();
-
     if (this.rotationFrameId !== null) {
       window.cancelAnimationFrame(this.rotationFrameId);
       this.rotationFrameId = null;
     }
-
     if (this.timelineTimeoutId !== null) {
       window.clearTimeout(this.timelineTimeoutId);
       this.timelineTimeoutId = null;
     }
-
     if (this.spawnAnimationFrameId !== null) {
       window.cancelAnimationFrame(this.spawnAnimationFrameId);
       this.spawnAnimationFrameId = null;
     }
-
     this.spawnAnimations.clear();
+    this.labelPool.clear();
     this.labelOverlayEl?.empty();
 
     if (this.graph) {
-      const scene = this.graph.scene();
-      this.sphereGridMod?.disposeGroup(scene, this.hudGroup);
-      this.hudGroup = null;
-      this.sphereGridMod?.disposeGroup(scene, this.gridGroup);
-      this.gridGroup = null;
-      if (this.starsObject) {
-        scene.remove(this.starsObject);
-        this.starsObject.geometry.dispose();
-        (this.starsObject.material as THREE.Material).dispose();
-        this.starsObject = null;
-      }
       this.fogManager?.dispose();
       this.fogManager = null;
       try {
@@ -345,57 +257,128 @@ export class GalaxyView extends ItemView {
     return Promise.resolve();
   }
 
+  // ---- DOM shell -------------------------------------------------------------------
+
+  private buildTopBar(root: HTMLElement): HTMLElement {
+    const bar = root.createDiv({ cls: "galaxy-topbar" });
+    const button = (text: string) => bar.createEl("button", { text, cls: "galaxy-topbar-btn" });
+    const toggle = (text: string, pressed: boolean, onClick: () => void) => {
+      const el = button(text);
+      setPressed(el, pressed);
+      el.onclick = onClick;
+      return el;
+    };
+
+    button("Reset view").onclick = () => this.resetView();
+    this.rotateBtnEl = toggle("Rotate", this.autoRotating, () => this.toggleRotation());
+    this.orphanBtnEl = toggle("Orphans", this.showOrphans, () => this.toggleOrphans());
+    this.timelineBtnEl = toggle("Timeline", false, () => this.toggleTimeline());
+
+    this.timelineSpeedBar = bar.createDiv({ cls: "galaxy-topbar-group" });
+    for (const spd of [0.5, 1, 2, 4]) {
+      const sBtn = this.timelineSpeedBar.createEl("button", { text: `${spd}×`, cls: "galaxy-topbar-btn" });
+      setPressed(sBtn, spd === this.timelineSpeed);
+      this.timelineSpeedButtons.set(spd, sBtn);
+      sBtn.onclick = () => this.setTimelineSpeed(spd);
+    }
+    this.timelineDateEl = bar.createEl("span", {
+      cls: "galaxy-topbar-readout galaxy-timeline-date is-hidden",
+    });
+
+    const gearBtn = bar.createEl("button", {
+      cls: "galaxy-topbar-btn galaxy-topbar-btn--icon",
+      attr: { "aria-label": "Graph settings" },
+    });
+    setIcon(gearBtn, "settings");
+    gearBtn.onclick = () => this.openSettingsPanel();
+
+    return bar.createEl("span", { cls: "galaxy-topbar-readout" });
+  }
+
+  private buildPanels(root: HTMLElement) {
+    this.settingsPanelEl = root.createDiv({ cls: "galaxy-settings-panel" });
+    buildSettingsPanel(this.settingsPanelEl, this.plugin, this.app, {
+      closeSettingsPanel: () => this.closeSettingsPanel(),
+      refreshNodeColors: () => this.refreshNodeColors(),
+      refreshLinkColors: () => this.refreshLinkColors(),
+      rebuildFog: () => this.rebuildFog(),
+      rebuildLabels: () => this.rebuildLabels(),
+      refreshSparklineIfSelected: () => this.refreshSparklineIfSelected(),
+      refreshForces: () => this.refreshForces(),
+      recomputeActivityHeat: () => this.recomputeActivityHeat(),
+      flashSaved: () => this.flashSaved(),
+      setSavedEl: (el) => {
+        this.savedEl = el;
+      },
+    });
+
+    this.inspectorEl = root.createDiv({ cls: "galaxy-inspector" });
+    this.inspectorPanel = new InspectorPanel(
+      this.inspectorEl,
+      {
+        app: this.app,
+        getSettings: () => this.plugin.settings,
+        getGraphData: () => this.graphData,
+        getTheme: () => this.theme,
+      },
+      {
+        navigateTo: (node) => {
+          this.selectNode(node);
+          this.focusNode(node);
+        },
+        clearSelection: () => this.clearHighlight(),
+        refreshGraphData: () => buildGraphData(this.app),
+        updateGraphData: (data) => {
+          this.graphData = data;
+          this.fullGraphData = data;
+        },
+        graphInstance: () => this.graph,
+        rebuildFog: () => this.rebuildFog(),
+        rebuildLabels: () => this.rebuildLabels(),
+      },
+    );
+  }
+
+  // ---- Graph setup -----------------------------------------------------------------
+
   private initGraph() {
-    if (!this.graphContainer) return;
+    const three = this.THREE;
+    const GraphCtor = this.ForceGraph3DCtor;
+    if (!this.graphContainer || !three || !GraphCtor) return;
     const w = this.graphContainer.clientWidth || 800;
     const h = this.graphContainer.clientHeight || 600;
 
-    const hlNodes = this.highlightNodes;
-    const hlLinks = this.highlightLinks;
-    const accent = this.themeAccent;
-
-    const GraphCtor = this.ForceGraph3DCtor;
-    if (!GraphCtor) return;
     this.graph = new GraphCtor(this.graphContainer, { controlType: "orbit" })
       .width(w)
       .height(h)
-      .backgroundColor(this.themeBg)
+      .backgroundColor(this.theme.ground)
       .graphData(this.graphData)
       .nodeId("id")
       .nodeLabel("name")
-      .nodeVal((n: GNode) => this.getAnimatedNodeVal(n))
-      .nodeRelSize(5)
+      .nodeVal((n: GNode) => this.nodeValFor(n))
+      .nodeRelSize(NODE_REL_SIZE)
       .nodeOpacity(0.92)
       .nodeResolution(16)
-      .nodeColor((n: GNode) => {
-        if (hlNodes.size === 0) return getNodeColor(n, this.plugin.settings);
-        return hlNodes.has(n.id) ? accent : DIM_NODE;
-      })
-      .linkColor((l: GLink) => {
-        if (hlLinks.size === 0) return this.linkNormal();
-        return hlLinks.has(l) ? this.linkHighlight() : this.linkDim();
-      })
-      .linkWidth((l: GLink) => (hlLinks.has(l) ? 1.8 : 0.5))
+      .nodeColor((n: GNode) => this.nodeColorFor(n))
+      .linkColor((l: GLink) => this.linkColorFor(l))
+      .linkWidth(0)
       .linkOpacity(1.0)
       .linkDirectionalArrowLength(0)
       .onNodeClick((n: GNode) => this.handleNodeClick(n))
       .onNodeDrag((n: GNode) => {
         this.isDragging = true;
-        const sprite = this.fogManager?.fogNodeMap.get(n.id);
-        if (sprite && n.x != null && n.y != null && n.z != null) {
-          sprite.position.set(n.x, n.y, n.z);
-        }
+        this.moveCloudTo(n);
       })
       .onNodeDragEnd((n: GNode) => {
-        const sprite = this.fogManager?.fogNodeMap.get(n.id);
-        if (sprite && n.x != null && n.y != null && n.z != null) {
-          sprite.position.set(n.x, n.y, n.z);
-        }
+        this.moveCloudTo(n);
         window.setTimeout(() => {
           this.isDragging = false;
         }, 1000);
       })
-      .onBackgroundClick(() => this.resetView());
+      .onBackgroundClick(() => this.clearSelection());
+
+    this.sceneFog = new three.FogExp2(this.theme.ground, FOG_DENSITY_FACTOR / INITIAL_GRAPH_RADIUS);
+    this.graph.scene().fog = this.sceneFog;
 
     // 3d-force-graph kicks off its internal render loop synchronously on construction (via
     // requestAnimationFrame), but the physics-engine setup triggered by .graphData() above is
@@ -410,20 +393,59 @@ export class GalaxyView extends ItemView {
     window.setTimeout(() => this.graph?.resumeAnimation(), 50);
 
     this.refreshForces();
-    this.graph.cameraPosition({ x: 0, y: 0, z: 1400 });
+    this.graph.cameraPosition({ x: 0, y: 0, z: INITIAL_CAMERA_Z });
   }
+
+  private onSimulationSettled() {
+    if (!this.graph) return;
+    this.updateSceneFog();
+    this.rebuildFog();
+    this.rebuildLabels();
+    this.frameGraph(FLY_DUR_RESET);
+  }
+
+  private moveCloudTo(n: GNode) {
+    const sprite = this.fogManager?.fogNodeMap.get(n.id);
+    if (sprite && n.x != null && n.y != null && n.z != null) sprite.position.set(n.x, n.y, n.z);
+  }
+
+  // ---- Theme -----------------------------------------------------------------------
+
+  private readTheme(): CanvasTheme {
+    const style = activeWindow.getComputedStyle(this.contentEl);
+    const fallbackDark = activeDocument.body.classList.contains("theme-dark");
+    return readCanvasTheme((name) => style.getPropertyValue(name), fallbackDark);
+  }
+
+  private applyTheme() {
+    this.theme = this.readTheme();
+    if (this.graph) {
+      this.graph.backgroundColor(this.theme.ground);
+      this.sceneFog?.color.set(this.theme.ground);
+    }
+    this.refreshNodeColors();
+    this.refreshLinkColors();
+    this.rebuildFog();
+    this.refreshSparklineIfSelected();
+  }
+
+  private updateSceneFog() {
+    if (!this.sceneFog) return;
+    const radius = Math.max(this.graphSphere()?.radius ?? 0, 200);
+    this.sceneFog.density = FOG_DENSITY_FACTOR / radius;
+    this.sceneFog.color.set(this.theme.ground);
+  }
+
+  // ---- Per-frame loop --------------------------------------------------------------
 
   private startRotationLoop() {
     let lastMs = performance.now();
-
     const tick = (nowMs: number) => {
       this.rotationFrameId = window.requestAnimationFrame(tick);
-
       if (!this.graph || !this.tabVisible) {
         lastMs = nowMs;
         return;
       }
-
       const dt = Math.min(nowMs - lastMs, 100);
       lastMs = nowMs;
 
@@ -446,48 +468,57 @@ export class GalaxyView extends ItemView {
       this.fogManager?.syncFogPositions(this.graphData.nodes);
       this.updateLabelOverlay();
     };
-
     this.rotationFrameId = window.requestAnimationFrame(tick);
   }
 
   private toggleRotation() {
     this.autoRotating = !this.autoRotating;
-    if (this.rotateBtnEl) {
-      this.rotateBtnEl.textContent = `Rotate: ${this.autoRotating ? "ON" : "OFF"}`;
-    }
+    if (this.rotateBtnEl) setPressed(this.rotateBtnEl, this.autoRotating);
   }
 
   private toggleOrphans() {
     this.showOrphans = !this.showOrphans;
-    if (this.orphanBtnEl) {
-      this.orphanBtnEl.textContent = `Orphans: ${this.showOrphans ? "ON" : "OFF"}`;
-    }
+    if (this.orphanBtnEl) setPressed(this.orphanBtnEl, this.showOrphans);
     if (!this.graph) return;
-    this.graphData = this.showOrphans
-      ? this.fullGraphData
-      : { nodes: this.fullGraphData.nodes.filter((n) => n.degree > 0), links: this.fullGraphData.links };
+    this.graphData = this.visibleGraphData();
     this.graph.graphData(this.graphData);
     this.rebuildFog();
     this.rebuildLabels();
   }
+
+  private visibleGraphData() {
+    return this.showOrphans
+      ? this.fullGraphData
+      : { nodes: this.fullGraphData.nodes.filter((n) => n.degree > 0), links: this.fullGraphData.links };
+  }
+
+  // ---- Timeline --------------------------------------------------------------------
 
   private toggleTimeline() {
     if (this.timelineActive) this.stopTimeline();
     else this.startTimeline();
   }
 
+  private setTimelineSpeed(speed: number) {
+    this.timelineSpeed = speed;
+    for (const [spd, el] of this.timelineSpeedButtons) setPressed(el, spd === speed);
+    if (this.timelineActive) {
+      this.stopTimeline();
+      this.startTimeline();
+    }
+  }
+
   private startTimeline() {
     if (!this.graph) return;
-
     if (this.timelineTimeoutId !== null) {
       window.clearTimeout(this.timelineTimeoutId);
       this.timelineTimeoutId = null;
     }
 
     this.timelineActive = true;
-    if (this.timelineBtnEl) this.timelineBtnEl.textContent = "Timeline: ON";
+    if (this.timelineBtnEl) setPressed(this.timelineBtnEl, true);
     this.timelineSpeedBar?.addClass("is-visible");
-    this.timelineDateEl?.addClass("is-visible");
+    this.timelineDateEl?.removeClass("is-hidden");
 
     // Cinematic forces for timeline — restored to user settings when timeline ends
     (this.graph.d3Force("charge") as ForceLike | undefined)?.strength?.(-120);
@@ -497,7 +528,7 @@ export class GalaxyView extends ItemView {
     // Soft boundary: no gravity inside 350 units, increasing pull beyond that
     const BOUND_RADIUS = 650;
     this.graph.d3Force("center-gravity", (alpha: number) => {
-      for (const node of this.graphData.nodes as (GNode & { vx?: number; vy?: number; vz?: number })[]) {
+      for (const node of this.graphData.nodes as Mutable[]) {
         const x = node.x ?? 0;
         const y = node.y ?? 0;
         const z = node.z ?? 0;
@@ -512,31 +543,9 @@ export class GalaxyView extends ItemView {
       }
     });
 
-    const candidateNodes = this.showOrphans
-      ? this.fullGraphData.nodes
-      : this.fullGraphData.nodes.filter((n) => n.degree > 0);
-
-    let playbackNodes: GNode[];
-    if (!this.showOrphans) {
-      const candidateIds = new Set(candidateNodes.map((n) => n.id));
-      const connectedIds = new Set<string>();
-      for (const link of this.fullGraphData.links) {
-        const src = resolveId(link.source);
-        const tgt = resolveId(link.target);
-        if (candidateIds.has(src) && candidateIds.has(tgt)) {
-          connectedIds.add(src);
-          connectedIds.add(tgt);
-        }
-      }
-      playbackNodes = candidateNodes.filter((n) => connectedIds.has(n.id));
-    } else {
-      playbackNodes = [...candidateNodes];
-    }
-
-    const allNodes = playbackNodes.sort(
+    const allNodes = this.timelinePlaybackNodes().sort(
       (a, b) => this.getTimelineTimestamp(a) - this.getTimelineTimestamp(b),
     );
-
     const msPerNode = 250 / this.timelineSpeed;
     let idx = 0;
 
@@ -546,33 +555,16 @@ export class GalaxyView extends ItemView {
     this.rebuildFog();
     this.rebuildLabels();
 
-    const getSpawnNearCentroid = (): { x: number; y: number; z: number } => {
-      const positioned = this.fullGraphData.nodes.filter(
-        (v) => this.timelineVisibleSet.has(v.id) && v.x != null,
-      );
-      const count = positioned.length || 1;
-      const cx = positioned.reduce((s, v) => s + (v.x ?? 0), 0) / count;
-      const cy = positioned.reduce((s, v) => s + (v.y ?? 0), 0) / count;
-      const cz = positioned.reduce((s, v) => s + (v.z ?? 0), 0) / count;
-      const jitter = 25;
-      return {
-        x: cx + (Math.random() - 0.5) * jitter,
-        y: cy + (Math.random() - 0.5) * jitter,
-        z: cz + (Math.random() - 0.5) * jitter,
-      };
-    };
-
     const reveal = () => {
       if (!this.timelineActive) return;
-
-      const n = allNodes[idx++];
-      const spawn = getSpawnNearCentroid();
+      const n = allNodes[idx++] as Mutable;
+      const spawn = this.spawnNearCentroid();
       n.x = spawn.x;
       n.y = spawn.y;
       n.z = spawn.z;
-      (n as GNode & { vx?: number; vy?: number; vz?: number }).vx = 0;
-      (n as GNode & { vx?: number; vy?: number; vz?: number }).vy = 0;
-      (n as GNode & { vx?: number; vy?: number; vz?: number }).vz = 0;
+      n.vx = 0;
+      n.vy = 0;
+      n.vz = 0;
       this.timelineVisibleSet.add(n.id);
       this.startSpawnAnimation(n);
 
@@ -582,12 +574,11 @@ export class GalaxyView extends ItemView {
       }
 
       const visibleNodes = this.fullGraphData.nodes.filter((v) => this.timelineVisibleSet.has(v.id));
-      const visibleLinks = this.fullGraphData.links.filter((l) => {
-        return (
-          this.timelineVisibleSet.has(resolveId(l.source)) && this.timelineVisibleSet.has(resolveId(l.target))
-        );
-      });
-
+      const visibleLinks = this.fullGraphData.links.filter(
+        (l) =>
+          this.timelineVisibleSet.has(resolveId(l.source)) &&
+          this.timelineVisibleSet.has(resolveId(l.target)),
+      );
       this.graphData = { nodes: visibleNodes, links: visibleLinks };
       // graphData() re-heats the simulation on its own, so no explicit alpha kick is needed
       this.graph?.graphData(this.graphData);
@@ -598,11 +589,43 @@ export class GalaxyView extends ItemView {
         this.stopTimeline(true);
         return;
       }
-
       this.timelineTimeoutId = window.setTimeout(reveal, msPerNode);
     };
-
     reveal();
+  }
+
+  private timelinePlaybackNodes(): GNode[] {
+    const candidateNodes = this.showOrphans
+      ? this.fullGraphData.nodes
+      : this.fullGraphData.nodes.filter((n) => n.degree > 0);
+    if (this.showOrphans) return [...candidateNodes];
+    const candidateIds = new Set(candidateNodes.map((n) => n.id));
+    const connectedIds = new Set<string>();
+    for (const link of this.fullGraphData.links) {
+      const src = resolveId(link.source);
+      const tgt = resolveId(link.target);
+      if (candidateIds.has(src) && candidateIds.has(tgt)) {
+        connectedIds.add(src);
+        connectedIds.add(tgt);
+      }
+    }
+    return candidateNodes.filter((n) => connectedIds.has(n.id));
+  }
+
+  private spawnNearCentroid(): Vec3 {
+    const positioned = this.fullGraphData.nodes.filter(
+      (v) => this.timelineVisibleSet.has(v.id) && v.x != null,
+    );
+    const count = positioned.length || 1;
+    const cx = positioned.reduce((sum, v) => sum + (v.x ?? 0), 0) / count;
+    const cy = positioned.reduce((sum, v) => sum + (v.y ?? 0), 0) / count;
+    const cz = positioned.reduce((sum, v) => sum + (v.z ?? 0), 0) / count;
+    const jitter = 25;
+    return {
+      x: cx + (Math.random() - 0.5) * jitter,
+      y: cy + (Math.random() - 0.5) * jitter,
+      z: cz + (Math.random() - 0.5) * jitter,
+    };
   }
 
   private stopTimeline(keepState = false) {
@@ -610,12 +633,11 @@ export class GalaxyView extends ItemView {
       window.clearTimeout(this.timelineTimeoutId);
       this.timelineTimeoutId = null;
     }
-
     this.timelineActive = false;
-    if (this.timelineBtnEl) this.timelineBtnEl.textContent = "Timeline: OFF";
+    if (this.timelineBtnEl) setPressed(this.timelineBtnEl, false);
     this.timelineSpeedBar?.removeClass("is-visible");
     if (this.timelineDateEl) {
-      this.timelineDateEl.removeClass("is-visible");
+      this.timelineDateEl.addClass("is-hidden");
       this.timelineDateEl.textContent = "";
     }
 
@@ -625,26 +647,26 @@ export class GalaxyView extends ItemView {
 
     if (!keepState) {
       this.timelineVisibleSet.clear();
-      this.graphData = this.showOrphans
-        ? this.fullGraphData
-        : { nodes: this.fullGraphData.nodes.filter((n) => n.degree > 0), links: this.fullGraphData.links };
+      this.graphData = this.visibleGraphData();
       this.graph?.graphData(this.graphData);
       this.rebuildFog();
       this.rebuildLabels();
     }
+    this.updateSceneFog();
   }
 
   private getTimelineTimestamp(node: GNode): number {
     const file = this.app.vault.getAbstractFileByPath(node.filePath);
     if (!(file instanceof TFile)) return 0;
-
     const cache = this.app.metadataCache.getFileCache(file);
     return parseTimestamp(cache?.frontmatter?.date, file.stat.ctime);
   }
 
+  // ---- Clouds, labels, forces -------------------------------------------------------
+
   private rebuildFog() {
     if (!this.graph || !this.fogManager) return;
-    this.fogManager.rebuildFog(this.graphData.nodes, this.plugin.settings);
+    this.fogManager.rebuildFog(this.graphData.nodes, this.graphData.links, this.plugin.settings, this.theme);
   }
 
   private rebuildLabels() {
@@ -652,7 +674,6 @@ export class GalaxyView extends ItemView {
       .filter((node) => node.degree >= this.plugin.settings.indexDegreeThreshold)
       .sort((a, b) => b.degree - a.degree)
       .slice(0, this.plugin.settings.topLabelCount);
-    this.fogManager?.rebuildLabels();
     this.updateLabelOverlay();
   }
 
@@ -674,7 +695,7 @@ export class GalaxyView extends ItemView {
     if (!this.graph) return;
     const s = this.plugin.settings;
     this.graph.d3Force("center-gravity", (alpha: number) => {
-      for (const node of this.graphData.nodes as (GNode & { vx?: number; vy?: number; vz?: number })[]) {
+      for (const node of this.graphData.nodes as Mutable[]) {
         const x = node.x ?? 0;
         const y = node.y ?? 0;
         const z = node.z ?? 0;
@@ -691,18 +712,13 @@ export class GalaxyView extends ItemView {
 
   private startSpawnAnimation(node: GNode) {
     const targetVal = Math.max(node.val, 0.01);
-    this.spawnAnimations.set(node.id, {
-      node,
-      targetVal,
-      startTime: performance.now(),
-    });
+    this.spawnAnimations.set(node.id, { node, targetVal, startTime: performance.now() });
     node.val = 0.01;
     this.runSpawnAnimationLoop();
   }
 
   private runSpawnAnimationLoop() {
     if (this.spawnAnimationFrameId !== null) return;
-
     const step = (now: number) => {
       let hasActive = false;
       for (const [nodeId, state] of this.spawnAnimations) {
@@ -716,16 +732,13 @@ export class GalaxyView extends ItemView {
           hasActive = true;
         }
       }
-
-      this.graph?.nodeVal(this.graph.nodeVal());
-
+      this.refreshNodeSizes();
       if (hasActive || this.spawnAnimations.size > 0) {
         this.spawnAnimationFrameId = window.requestAnimationFrame(step);
       } else {
         this.spawnAnimationFrameId = null;
       }
     };
-
     this.spawnAnimationFrameId = window.requestAnimationFrame(step);
   }
 
@@ -739,76 +752,81 @@ export class GalaxyView extends ItemView {
 
   private updateLabelOverlay() {
     const three = this.THREE;
-    if (!this.labelOverlayEl || !this.graph || !three) return;
-    this.labelOverlayEl.empty();
-    if (!this.topLabelNodes.length) return;
-
-    const camera = this.graph.camera();
-    const renderer = this.graph.renderer();
-
-    if (camera.position.length() > this.plugin.settings.labelHideDistance) return;
-
-    const canvas = renderer.domElement;
+    const overlay = this.labelOverlayEl;
+    if (!overlay || !this.graph || !three) return;
+    const camera = this.graph.camera() as THREE.PerspectiveCamera;
+    const canvas = this.graph.renderer().domElement;
     const width = canvas.clientWidth;
     const height = canvas.clientHeight;
-    if (!width || !height) return;
+    if (!width || !height) {
+      this.syncLabelPool([]);
+      return;
+    }
 
-    for (const node of this.topLabelNodes) {
-      if (node.x == null || node.y == null || node.z == null) continue;
+    const focalPx = height / 2 / Math.tan((camera.fov * Math.PI) / 360);
+    const showHubs = camera.position.length() <= this.plugin.settings.labelHideDistance;
+    const hubIds = new Set(showHubs ? this.topLabelNodes.map((n) => n.id) : []);
+    const hubCandidates: LabelCandidate<GNode>[] = [];
+    const nearCandidates: LabelCandidate<GNode>[] = [];
+    const vec = new three.Vector3();
 
-      const vec = new three.Vector3(node.x, node.y, node.z);
+    const consider = (node: GNode, isHub: boolean) => {
+      if (node.x == null || node.y == null || node.z == null) return;
+      vec.set(node.x, node.y, node.z);
+      const dist = vec.distanceTo(camera.position);
+      const screenRadius = (nodeRadius(node.val, NODE_REL_SIZE) * focalPx) / Math.max(dist, 1);
+      if (!isHub && screenRadius < LABEL_NEAR_PX) return;
       vec.project(camera);
-      if (vec.z > 1) continue;
+      if (vec.z > 1) return;
+      const cx = (vec.x * 0.5 + 0.5) * width;
+      const cy = (-vec.y * 0.5 + 0.5) * height;
+      const w = estimateLabelWidth(node.name);
+      const top = cy - screenRadius - LABEL_HEIGHT - LABEL_GAP;
+      if (cx + w / 2 < 0 || cx - w / 2 > width || top + LABEL_HEIGHT < TOPBAR_BAND_PX || top > height) return;
+      (isHub ? hubCandidates : nearCandidates).push({
+        key: node,
+        x: cx - w / 2,
+        y: top,
+        width: w,
+        height: LABEL_HEIGHT,
+      });
+    };
 
-      const x = (vec.x * 0.5 + 0.5) * width;
-      const y = (-vec.y * 0.5 + 0.5) * height;
-      if (x < -50 || x > width + 50 || y < -20 || y > height + 20) continue;
+    if (showHubs) for (const hub of this.topLabelNodes) consider(hub, true);
+    for (const node of this.graphData.nodes) if (!hubIds.has(node.id)) consider(node, false);
+    nearCandidates.sort((a, b) => b.key.degree - a.key.degree);
 
-      const color = getNodeColor(node, this.plugin.settings);
-      const labelEl = this.labelOverlayEl.createDiv({ cls: "galaxy-label" });
-      labelEl.style.left = `${x}px`;
-      labelEl.style.top = `${y}px`;
+    this.syncLabelPool(placeLabels([...hubCandidates, ...nearCandidates], LABEL_MAX));
+  }
 
-      const dot = labelEl.createEl("span", { cls: "galaxy-label-dot" });
-      dot.style.background = color;
-
-      const text = labelEl.createEl("span");
-      text.textContent = node.name;
+  private syncLabelPool(placed: LabelCandidate<GNode>[]) {
+    const overlay = this.labelOverlayEl;
+    if (!overlay) return;
+    const keep = new Set<string>();
+    for (const c of placed) {
+      keep.add(c.key.id);
+      let el = this.labelPool.get(c.key.id);
+      if (!el) {
+        el = overlay.createDiv({ cls: "galaxy-label" });
+        el.createEl("span", { cls: "galaxy-label-dot" });
+        el.createEl("span", { cls: "galaxy-label-text", text: c.key.name });
+        const node = c.key;
+        el.onclick = () => {
+          this.selectNode(node);
+          this.focusNode(node);
+        };
+        this.labelPool.set(c.key.id, el);
+      }
+      el.style.transform = `translate(${Math.round(c.x)}px, ${Math.round(c.y)}px)`;
+      const dot = el.firstElementChild as HTMLElement | null;
+      if (dot) dot.style.background = getNodeColor(c.key, this.plugin.settings, this.theme.isDark);
     }
-  }
-
-  private updateGridOpacities() {
-    this.sphereGridMod?.updateGridSphereOpacities(
-      this.gridGroup,
-      this.plugin.settings.sphereOpacity,
-      this.plugin.settings.ringsOpacity,
-      this.plugin.settings.groundGridOpacity,
-    );
-  }
-
-  private toggleStars(enabled: boolean) {
-    const scene = this.graph?.scene() ?? null;
-    if (!scene || !this.sphereGridMod) return;
-    if (enabled && !this.starsObject) {
-      const s = this.plugin.settings;
-      this.starsObject = this.sphereGridMod.buildStarfield(
-        scene,
-        800,
-        s.starCount,
-        s.starSize,
-        s.starBrightness,
-      );
-    } else if (!enabled && this.starsObject) {
-      scene.remove(this.starsObject);
-      this.starsObject.geometry.dispose();
-      (this.starsObject.material as THREE.Material).dispose();
-      this.starsObject = null;
+    for (const [id, el] of this.labelPool) {
+      if (!keep.has(id)) {
+        el.remove();
+        this.labelPool.delete(id);
+      }
     }
-  }
-
-  private rebuildStars() {
-    this.toggleStars(false);
-    if (this.plugin.settings.showStars) this.toggleStars(true);
   }
 
   private attachResizeObserver() {
@@ -821,28 +839,50 @@ export class GalaxyView extends ItemView {
     this.resizeObserver.observe(this.graphContainer);
   }
 
+  // ---- Selection and camera --------------------------------------------------------
+
   private handleNodeClick(node: GNode) {
     const now = Date.now();
     const isDouble = now - this.lastClickTime < DOUBLE_CLICK_MS && this.lastClickedNodeId === node.id;
     this.lastClickTime = now;
     this.lastClickedNodeId = node.id;
-
     if (isDouble) {
-      this.flyToNode(node, FLY_DIST_DOUBLE, FLY_DUR_DOUBLE);
+      this.focusNode(node);
       return;
     }
+    this.selectNode(node);
+  }
 
+  private selectNode(node: GNode) {
     this.selectedNode = node;
     this.updateHighlight(node);
-    this.showInspector(node);
-    this.flyToNode(node, this.plugin.settings.clickFlyDistance, FLY_DUR_SINGLE);
+    this.inspectorPanel?.show(node);
+  }
+
+  private clearSelection() {
+    this.clearHighlight();
+    this.inspectorPanel?.hide();
+    this.lastClickedNodeId = null;
+  }
+
+  private neighboursOf(node: GNode): GNode[] {
+    const byId = new Map(this.graphData.nodes.map((n) => [n.id, n]));
+    const out: GNode[] = [];
+    for (const link of this.graphData.links) {
+      const src = resolveId(link.source);
+      const tgt = resolveId(link.target);
+      const otherId = src === node.id ? tgt : tgt === node.id ? src : null;
+      if (otherId === null) continue;
+      const other = byId.get(otherId);
+      if (other) out.push(other);
+    }
+    return out;
   }
 
   private updateHighlight(node: GNode) {
     this.highlightNodes.clear();
     this.highlightLinks.clear();
     this.highlightNodes.add(node.id);
-
     for (const link of this.graphData.links) {
       const src = resolveId(link.source);
       const tgt = resolveId(link.target);
@@ -852,59 +892,119 @@ export class GalaxyView extends ItemView {
         this.highlightNodes.add(tgt);
       }
     }
-
-    if (!this.graph) return;
+    this.fogManager?.setFocus(node.id);
     this.refreshNodeColors();
+    this.refreshNodeSizes();
     this.refreshLinkColors();
-    this.graph.linkWidth(this.graph.linkWidth());
   }
 
   private clearHighlight() {
     this.highlightNodes.clear();
     this.highlightLinks.clear();
     this.selectedNode = null;
-    if (!this.graph) return;
+    this.fogManager?.setFocus(null);
     this.refreshNodeColors();
+    this.refreshNodeSizes();
     this.refreshLinkColors();
-    this.graph.linkWidth(this.graph.linkWidth());
   }
 
-  private flyToNode(node: GNode, dist: number, duration: number) {
-    const { x = 0, y = 0, z = 0 } = node;
+  /** The body of the galaxy: connected notes only, since orphans drift to the periphery. */
+  private graphSphere() {
+    const positioned = this.graphData.nodes.filter(isPositioned);
+    const connected = positioned.filter((n) => n.degree > 0);
+    return robustSphere((connected.length > 0 ? connected : positioned).map(toVec));
+  }
+
+  private cameraFov(): number {
+    return this.graph ? (this.graph.camera() as THREE.PerspectiveCamera).fov : 75;
+  }
+
+  private viewportAspect(): number {
+    const el = this.graph?.renderer().domElement;
+    return el && el.clientHeight > 0 ? el.clientWidth / el.clientHeight : 1.2;
+  }
+
+  /** Frames the whole graph from slightly above its equator. */
+  private frameGraph(duration: number) {
     if (!this.graph) return;
-    const camera = this.graph.camera();
-    const dx = camera.position.x - x;
-    const dy = camera.position.y - y;
-    const dz = camera.position.z - z;
-    const len = Math.hypot(dx, dy, dz) || 1;
-    const nodeRadius = Math.sqrt(node.val) * 5;
-    const effectiveDist = Math.max(dist, nodeRadius * (dist <= FLY_DIST_DOUBLE ? 2 : 4));
+    const sphere = this.graphSphere();
+    const center = sphere?.center ?? { x: 0, y: 0, z: 0 };
+    const radius = Math.max(sphere?.radius ?? 0, 100);
+    const dist = fitDistance(radius, this.cameraFov(), this.viewportAspect(), FRAME_FILL);
+    const dir = elevatedDirection(CAMERA_ELEVATION_DEG);
     this.graph.cameraPosition(
-      {
-        x: x + (dx / len) * effectiveDist,
-        y: y + (dy / len) * effectiveDist,
-        z: z + (dz / len) * effectiveDist,
-      },
-      { x, y, z },
+      { x: center.x + dir.x * dist, y: center.y + dir.y * dist, z: center.z + dir.z * dist },
+      center,
       duration,
     );
   }
 
+  /** Frames a node with its neighbourhood, keeping the approach direction and never getting too close. */
+  private focusNode(node: GNode) {
+    if (!this.graph || node.x == null || node.y == null || node.z == null) return;
+    const hubRadius = nodeRadius(node.val, NODE_REL_SIZE);
+    const sphere = boundingSphere([node, ...this.neighboursOf(node)].filter(isPositioned).map(toVec));
+    const radius = Math.max(sphere?.radius ?? 0, hubRadius * FOCUS_MIN_NODE_RADII);
+    const fov = this.cameraFov();
+    const dist = Math.max(
+      fitDistance(radius, fov, this.viewportAspect(), FOCUS_FILL),
+      minDistanceForApparentFraction(hubRadius, fov, MAX_HUB_FRACTION),
+    );
+    const camera = this.graph.camera();
+    const dx = camera.position.x - node.x;
+    const dy = camera.position.y - node.y;
+    const dz = camera.position.z - node.z;
+    const len = Math.hypot(dx, dy, dz) || 1;
+    this.graph.cameraPosition(
+      { x: node.x + (dx / len) * dist, y: node.y + (dy / len) * dist, z: node.z + (dz / len) * dist },
+      { x: node.x, y: node.y, z: node.z },
+      FLY_DUR_FOCUS,
+    );
+  }
+
   private resetView() {
-    this.clearHighlight();
-    this.hideInspector();
-    this.lastClickedNodeId = null;
+    this.clearSelection();
+    this.frameGraph(FLY_DUR_RESET);
+  }
+
+  // ---- Colour accessors ------------------------------------------------------------
+
+  private nodeColorFor(n: GNode): string {
+    const own = getNodeColor(n, this.plugin.settings, this.theme.isDark);
+    if (this.highlightNodes.size === 0 || this.highlightNodes.has(n.id)) return own;
+    return dimNodeColor(this.theme.ink);
+  }
+
+  private nodeValFor(n: GNode): number {
+    const v = this.getAnimatedNodeVal(n);
+    return this.selectedNode?.id === n.id ? v * SELECTED_VAL_SCALE : v;
+  }
+
+  private linkColorFor(l: GLink): string {
+    const s = this.plugin.settings;
+    if (this.highlightLinks.size === 0) return rgba(this.theme.ink, s.linkOpacityDefault);
+    if (this.highlightLinks.has(l)) {
+      const c = this.selectedNode ? getNodeColor(this.selectedNode, s, this.theme.isDark) : this.theme.ink;
+      return rgba(c, s.linkOpacityHighlight);
+    }
+    return rgba(this.theme.ink, s.linkOpacityDim);
+  }
+
+  private refreshNodeColors() {
     if (!this.graph) return;
-    this.graph.cameraPosition({ x: 0, y: 0, z: 1400 }, { x: 0, y: 0, z: 0 }, FLY_DUR_RESET);
+    this.graph.nodeColor((n: GNode) => this.nodeColorFor(n));
+    this.updateLabelOverlay();
   }
 
-  private showInspector(node: GNode) {
-    this.inspectorPanel?.show(node);
+  private refreshNodeSizes() {
+    this.graph?.nodeVal((n: GNode) => this.nodeValFor(n));
   }
 
-  private hideInspector() {
-    this.inspectorPanel?.hide();
+  private refreshLinkColors() {
+    this.graph?.linkColor((l: GLink) => this.linkColorFor(l));
   }
+
+  // ---- Panels ----------------------------------------------------------------------
 
   private openSettingsPanel() {
     this.settingsPanelEl?.addClass("is-open");
@@ -925,35 +1025,7 @@ export class GalaxyView extends ItemView {
     this.refreshNodeColors();
   }
 
-  private refreshNodeColors() {
-    if (!this.graph) return;
-    this.graph.nodeColor((n: GNode) => {
-      if (this.highlightNodes.size === 0) return getNodeColor(n, this.plugin.settings);
-      return this.highlightNodes.has(n.id) ? this.themeAccent : DIM_NODE;
-    });
-    this.updateLabelOverlay();
-  }
-
-  private refreshLinkColors() {
-    if (!this.graph) return;
-    this.graph.linkColor((l: GLink) => {
-      if (this.highlightLinks.size === 0) return this.linkNormal();
-      return this.highlightLinks.has(l) ? this.linkHighlight() : this.linkDim();
-    });
-  }
-
   private refreshSparklineIfSelected() {
-    if (!this.selectedNode || !this.inspectorEl) return;
-    this.showInspector(this.selectedNode);
-  }
-
-  private linkNormal() {
-    return `rgba(120,160,220,${this.plugin.settings.linkOpacityDefault})`;
-  }
-  private linkHighlight() {
-    return `rgba(255,160,0,${this.plugin.settings.linkOpacityHighlight})`;
-  }
-  private linkDim() {
-    return `rgba(60,60,60,${this.plugin.settings.linkOpacityDim})`;
+    if (this.selectedNode) this.inspectorPanel?.show(this.selectedNode);
   }
 }

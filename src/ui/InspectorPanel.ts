@@ -1,14 +1,21 @@
-import { App, Notice, TFile } from "obsidian";
+import { App, Notice, TFile, setIcon } from "obsidian";
 import type { GalaxySettings } from "../settings";
 import type { GLink, GNode } from "../types";
 import { resolveId } from "../types";
+import { getNodeColor } from "../utils/colors";
 import { parseTimestamp } from "../utils/dates";
-import { DEFAULT_COLOR, FOLDER_PALETTE, getNodeColor } from "../utils/colors";
+import type { CanvasTheme } from "../utils/theme";
+
+export interface InspectorContext {
+  app: App;
+  getSettings(): GalaxySettings;
+  getGraphData(): { nodes: GNode[]; links: GLink[] };
+  getTheme(): CanvasTheme;
+}
 
 export interface InspectorPanelActions {
-  updateHighlight(node: GNode): void;
-  flyToNode(node: GNode, dist: number, duration: number): void;
-  clearHighlight(): void;
+  navigateTo(node: GNode): void;
+  clearSelection(): void;
   refreshGraphData(): { nodes: GNode[]; links: GLink[] };
   updateGraphData(data: { nodes: GNode[]; links: GLink[] }): void;
   graphInstance(): { graphData(data: { nodes: GNode[]; links: GLink[] }): unknown } | null;
@@ -16,22 +23,35 @@ export interface InspectorPanelActions {
   rebuildLabels(): void;
 }
 
+interface ActivityData {
+  monthly: number[];
+  cumulative: number[];
+  labels: string[];
+  totalNotes: number;
+  indexName: string;
+}
+
+const PREVIEW_CHARS = 200;
+const LINK_LIST_MAX = 12;
+const NEIGHBOUR_GRAPH_MAX = 20;
+const SVG_NS = "http://www.w3.org/2000/svg";
+
 export class InspectorPanel {
   constructor(
     private el: HTMLElement,
-    private app: App,
-    private getSettings: () => GalaxySettings,
-    private getGraphData: () => { nodes: GNode[]; links: GLink[] },
+    private ctx: InspectorContext,
     private actions: InspectorPanelActions,
-    private getFlyDist: () => number,
-    private flyDurSingle: number,
   ) {}
+
+  private nodeColor(n: GNode): string {
+    return getNodeColor(n, this.ctx.getSettings(), this.ctx.getTheme().isDark);
+  }
 
   show(node: GNode) {
     const panel = this.el;
     panel.empty();
 
-    const graphData = this.getGraphData();
+    const graphData = this.ctx.getGraphData();
     const outgoing: GNode[] = [];
     const incoming: GNode[] = [];
     const byId = new Map(graphData.nodes.map((n) => [n.id, n]));
@@ -48,15 +68,18 @@ export class InspectorPanel {
       }
     }
 
-    const fc = FOLDER_PALETTE[node.folder] ?? DEFAULT_COLOR;
+    // The selected note's own colour is the panel's one accent.
+    panel.style.setProperty("--galaxy-node-color", this.nodeColor(node));
 
     const header = panel.createDiv({ cls: "galaxy-inspector-header" });
-    const title = header.createEl("span", { cls: "galaxy-inspector-title" });
-    title.style.color = fc;
-    title.textContent = node.name;
-    const closeBtn = header.createEl("button", { text: "×", cls: "galaxy-inspector-close" });
+    header.createEl("span", { cls: "galaxy-inspector-title", text: node.name });
+    const closeBtn = header.createEl("button", {
+      cls: "galaxy-icon-btn",
+      attr: { "aria-label": "Close inspector" },
+    });
+    setIcon(closeBtn, "x");
     closeBtn.onclick = () => {
-      this.actions.clearHighlight();
+      this.actions.clearSelection();
       this.hide();
     };
 
@@ -67,74 +90,26 @@ export class InspectorPanel {
       ["Total", node.degree],
     ] as [string, number][]) {
       const stat = stats.createEl("span");
-      stat.createSpan({ text: `${lbl}:`, cls: "galaxy-stat-label" });
-      stat.appendText(` ${v}`);
+      stat.appendText(`${lbl} `);
+      stat.createEl("b", { text: String(v) });
     }
 
-    const badge = panel.createEl("span", { cls: "galaxy-inspector-badge" });
-    badge.style.color = fc;
-    badge.style.border = `1px solid ${fc}44`;
-    badge.textContent = node.folderName;
+    panel.createEl("span", { cls: "galaxy-inspector-badge", text: node.folderName });
 
-    const preview = panel.createDiv({ cls: "galaxy-inspector-preview" });
-    preview.textContent = "Loading preview…";
+    const preview = panel.createDiv({ cls: "galaxy-inspector-preview", text: "Loading preview…" });
     void this.loadPreview(node.filePath).then((previewText) => {
-      preview.textContent = previewText || "(empty)";
-      if (!previewText) preview.addClass("is-plain");
+      preview.textContent = previewText || "(empty note)";
     });
 
-    const openBtn = panel.createEl("button", { text: "Open note →", cls: "galaxy-open-btn" });
-    openBtn.onclick = () => {
-      const file = this.app.vault.getAbstractFileByPath(node.filePath);
-      if (file instanceof TFile) void this.app.workspace.getLeaf("tab").openFile(file);
-    };
+    this.renderActions(panel, node);
 
-    const truncTitle = node.name.length > 20 ? node.name.slice(0, 20) + "…" : node.name;
-    const addNoteBtn = panel.createEl("button", {
-      text: `+ Add note to ${truncTitle}`,
-      cls: "galaxy-add-btn",
-    });
-    addNoteBtn.onclick = async () => {
-      try {
-        const folderPath = node.filePath.includes("/")
-          ? node.filePath.substring(0, node.filePath.lastIndexOf("/"))
-          : "";
-        const now = new Date();
-        const timestamp = now.toISOString().slice(0, 10);
-        const baseName = `Untitled ${timestamp}`;
-        let newFileName = folderPath ? `${folderPath}/${baseName}.md` : `${baseName}.md`;
-        let suffix = 2;
-        while (this.app.vault.getAbstractFileByPath(newFileName)) {
-          newFileName = folderPath ? `${folderPath}/${baseName} ${suffix}.md` : `${baseName} ${suffix}.md`;
-          suffix++;
-        }
-        const tpl = this.getSettings().noteTemplate;
-        const content = tpl
-          .replace(/\{\{date\}\}/g, timestamp)
-          .replace(/\{\{index\}\}/g, node.name.replace(/[[\]]/g, ""))
-          .replace(/\{\{title\}\}/g, "Untitled")
-          .replace(/\{\{folder\}\}/g, folderPath || "vault root");
-        const newFile = await this.app.vault.create(newFileName, content);
-        const newLeaf = this.app.workspace.getLeaf("tab");
-        await newLeaf.openFile(newFile);
-        new Notice(`Created note in ${folderPath || "vault root"}`);
-        const newData = this.actions.refreshGraphData();
-        this.actions.updateGraphData(newData);
-        this.actions.graphInstance()?.graphData(newData);
-        this.actions.rebuildFog();
-        this.actions.rebuildLabels();
-      } catch (err) {
-        new Notice(`Error creating note: ${String(err)}`);
-      }
-    };
-
-    if (outgoing.length > 0) this.renderLinkSection(panel, "Links to", outgoing, "galaxy-link-item--out");
-    if (incoming.length > 0) this.renderLinkSection(panel, "Linked from", incoming, "galaxy-link-item--in");
+    if (outgoing.length > 0) this.renderLinkSection(panel, "Links to", outgoing);
+    if (incoming.length > 0) this.renderLinkSection(panel, "Linked from", incoming);
     if (!outgoing.length && !incoming.length) {
       panel.createEl("p", { text: "No connections in the current graph.", cls: "galaxy-empty-note" });
     }
 
-    this.renderSparkline(panel, node, this.buildActivityData(node));
+    this.renderSparkline(panel, this.buildActivityData(node));
     this.renderNeighborhoodGraph(panel, node, byId);
 
     panel.addClass("is-visible");
@@ -144,57 +119,90 @@ export class InspectorPanel {
     this.el.removeClass("is-visible");
   }
 
-  private renderLinkSection(parent: HTMLElement, heading: string, nodes: GNode[], colorCls: string) {
-    parent.createEl("div", { text: heading, cls: "galaxy-section-heading" });
+  private renderActions(panel: HTMLElement, node: GNode) {
+    const actions = panel.createDiv({ cls: "galaxy-inspector-actions" });
+    const openBtn = actions.createEl("button", { text: "Open note", cls: "mod-cta" });
+    openBtn.onclick = () => {
+      const file = this.ctx.app.vault.getAbstractFileByPath(node.filePath);
+      if (file instanceof TFile) void this.ctx.app.workspace.getLeaf("tab").openFile(file);
+    };
+    const addNoteBtn = actions.createEl("button", { text: "Add note here" });
+    addNoteBtn.setAttribute("aria-label", `Add a note linked to ${node.name}`);
+    addNoteBtn.onclick = () => void this.createLinkedNote(node);
+  }
 
+  private async createLinkedNote(node: GNode) {
+    try {
+      const folderPath = node.filePath.includes("/")
+        ? node.filePath.substring(0, node.filePath.lastIndexOf("/"))
+        : "";
+      const timestamp = new Date().toISOString().slice(0, 10);
+      const baseName = `Untitled ${timestamp}`;
+      let newFileName = folderPath ? `${folderPath}/${baseName}.md` : `${baseName}.md`;
+      let suffix = 2;
+      while (this.ctx.app.vault.getAbstractFileByPath(newFileName)) {
+        newFileName = folderPath ? `${folderPath}/${baseName} ${suffix}.md` : `${baseName} ${suffix}.md`;
+        suffix++;
+      }
+      const content = this.ctx
+        .getSettings()
+        .noteTemplate.replace(/\{\{date\}\}/g, timestamp)
+        .replace(/\{\{index\}\}/g, node.name.replace(/[[\]]/g, ""))
+        .replace(/\{\{title\}\}/g, "Untitled")
+        .replace(/\{\{folder\}\}/g, folderPath || "vault root");
+      const newFile = await this.ctx.app.vault.create(newFileName, content);
+      await this.ctx.app.workspace.getLeaf("tab").openFile(newFile);
+      new Notice(`Created note in ${folderPath || "vault root"}`);
+      const newData = this.actions.refreshGraphData();
+      this.actions.updateGraphData(newData);
+      this.actions.graphInstance()?.graphData(newData);
+      this.actions.rebuildFog();
+      this.actions.rebuildLabels();
+    } catch (err) {
+      new Notice(`Error creating note: ${String(err)}`);
+    }
+  }
+
+  private renderLinkSection(parent: HTMLElement, heading: string, nodes: GNode[]) {
+    parent.createEl("div", { text: heading, cls: "galaxy-section-heading" });
     const list = parent.createEl("ul", { cls: "galaxy-link-list" });
-    const MAX = 12;
-    for (const n of nodes.slice(0, MAX)) {
-      const a = list.createEl("li").createEl("a", { text: n.name, cls: `galaxy-link-item ${colorCls}` });
+    for (const n of nodes.slice(0, LINK_LIST_MAX)) {
+      const a = list.createEl("li").createEl("a", { text: n.name, cls: "galaxy-link-item" });
       a.onclick = (e) => {
         e.preventDefault();
-        this.actions.updateHighlight(n);
-        this.show(n);
-        this.actions.flyToNode(n, this.getFlyDist(), this.flyDurSingle);
+        this.actions.navigateTo(n);
       };
     }
-    if (nodes.length > MAX) {
-      list.createEl("li", { text: `+${nodes.length - MAX} more`, cls: "galaxy-link-more" });
+    if (nodes.length > LINK_LIST_MAX) {
+      list.createEl("li", { text: `+${nodes.length - LINK_LIST_MAX} more`, cls: "galaxy-link-more" });
     }
   }
 
   private async loadPreview(filePath: string): Promise<string> {
-    const file = this.app.vault.getAbstractFileByPath(filePath);
+    const file = this.ctx.app.vault.getAbstractFileByPath(filePath);
     if (!(file instanceof TFile)) return "";
     try {
-      const raw = await this.app.vault.cachedRead(file);
+      const raw = await this.ctx.app.vault.cachedRead(file);
       const body = raw.replace(/^---[\s\S]*?---\n?/, "").trim();
       const clean = body.replace(/^#{1,6}\s+/gm, "").replace(/[*_`[\]]/g, "");
-      return clean.length > 200 ? clean.slice(0, 200) + "…" : clean;
+      return clean.length > PREVIEW_CHARS ? clean.slice(0, PREVIEW_CHARS) + "…" : clean;
     } catch {
       return "";
     }
   }
 
-  private buildActivityData(node: GNode): {
-    monthly: number[];
-    cumulative: number[];
-    labels: string[];
-    totalNotes: number;
-    indexName: string;
-  } {
+  private buildActivityData(node: GNode): ActivityData {
     const constellationDates: Date[] = [];
     const clickedIndexName = node.name.replace(/[[\]]/g, "");
 
-    for (const file of this.app.vault.getMarkdownFiles()) {
-      const cache = this.app.metadataCache.getFileCache(file);
+    for (const file of this.ctx.app.vault.getMarkdownFiles()) {
+      const cache = this.ctx.app.metadataCache.getFileCache(file);
       const frontmatterLinks: unknown = cache?.frontmatter?.links ?? [];
       const linksArray: unknown[] = Array.isArray(frontmatterLinks) ? frontmatterLinks : [frontmatterLinks];
 
       for (const link of linksArray) {
         const clean = String(link).replace(/[[\]]/g, "").split("|")[0].trim();
         if (clean !== clickedIndexName) continue;
-
         constellationDates.push(new Date(parseTimestamp(cache?.frontmatter?.date, file.stat.ctime)));
         break;
       }
@@ -212,11 +220,8 @@ export class InspectorPanel {
     let startMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 11, 1);
     let endMonth = currentMonth;
     const earliest = new Date(constellationDates[0].getFullYear(), constellationDates[0].getMonth(), 1);
-    const latest = new Date(
-      constellationDates[constellationDates.length - 1].getFullYear(),
-      constellationDates[constellationDates.length - 1].getMonth(),
-      1,
-    );
+    const last = constellationDates[constellationDates.length - 1];
+    const latest = new Date(last.getFullYear(), last.getMonth(), 1);
     if (constellationDates.every((date) => date < startMonth)) {
       startMonth = earliest;
       endMonth = latest;
@@ -249,26 +254,14 @@ export class InspectorPanel {
     return { monthly, cumulative, labels, totalNotes, indexName: clickedIndexName };
   }
 
-  private renderSparkline(
-    container: HTMLElement,
-    node: GNode,
-    data: {
-      monthly: number[];
-      cumulative: number[];
-      labels: string[];
-      totalNotes: number;
-      indexName: string;
-    },
-  ) {
+  private renderSparkline(container: HTMLElement, data: ActivityData) {
     const wrap = container.createDiv({ cls: "galaxy-subpanel" });
-
-    wrap.createEl("div", { text: "Cluster growth · date field", cls: "galaxy-section-heading" });
+    wrap.createEl("div", { text: "Cluster growth", cls: "galaxy-section-heading" });
 
     if (data.totalNotes === 0) {
-      wrap.createEl("div", { text: "No notes link to this index yet", cls: "galaxy-empty-hint" });
+      wrap.createEl("div", { text: "No notes link to this note yet.", cls: "galaxy-empty-hint" });
       return;
     }
-
     if (data.totalNotes < 3 || data.monthly.length < 3) {
       wrap.createEl("div", {
         text: `${data.totalNotes} notes in this cluster`,
@@ -277,105 +270,71 @@ export class InspectorPanel {
       return;
     }
 
-    const NS = "http://www.w3.org/2000/svg";
-    const width = 220;
+    const width = 250;
     const height = 80;
-    const padTop = 10;
-    const padRight = 10;
-    const padBottom = 20;
-    const padLeft = 10;
+    const padTop = 8;
+    const padRight = 6;
+    const padBottom = 18;
+    const padLeft = 6;
     const plotWidth = width - padLeft - padRight;
     const plotHeight = height - padTop - padBottom;
     const maxMonthly = Math.max(...data.monthly, 1);
     const maxCumulative = Math.max(...data.cumulative, 1);
     const step = plotWidth / Math.max(1, data.monthly.length);
     const barWidth = Math.max(3, step - 2);
-    const color = getNodeColor(node, this.getSettings());
 
-    const svg = activeDocument.createElementNS(NS, "svg");
+    const svg = activeDocument.createElementNS(SVG_NS, "svg");
     svg.setAttribute("width", `${width}`);
     svg.setAttribute("height", `${height}`);
     svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
     svg.setAttribute("class", "galaxy-svg");
 
-    const axis = activeDocument.createElementNS(NS, "line");
-    axis.setAttribute("x1", `${padLeft}`);
-    axis.setAttribute("y1", `${padTop + plotHeight}`);
-    axis.setAttribute("x2", `${width - padRight}`);
-    axis.setAttribute("y2", `${padTop + plotHeight}`);
-    axis.setAttribute("stroke", "currentColor");
-    axis.setAttribute("stroke-opacity", "0.18");
-    axis.setAttribute("stroke-width", "1");
-    svg.appendChild(axis);
-
     const linePoints: string[] = [];
     data.monthly.forEach((count, i) => {
       const x = padLeft + i * step + (step - barWidth) / 2;
       const barHeight = (count / maxMonthly) * plotHeight;
-      const y = padTop + plotHeight - barHeight;
-      const bar = activeDocument.createElementNS(NS, "rect");
+      const bar = activeDocument.createElementNS(SVG_NS, "rect");
       bar.setAttribute("x", `${x}`);
-      bar.setAttribute("y", `${y}`);
+      bar.setAttribute("y", `${padTop + plotHeight - barHeight}`);
       bar.setAttribute("width", `${barWidth}`);
       bar.setAttribute("height", `${Math.max(0, barHeight)}`);
-      bar.setAttribute("rx", "1.5");
-      bar.setAttribute("fill", color);
-      bar.setAttribute("fill-opacity", "0.6");
+      bar.setAttribute("fill", "var(--galaxy-node-color)");
+      bar.setAttribute("fill-opacity", "0.55");
       svg.appendChild(bar);
-
-      const lineX = padLeft + i * step + step / 2;
-      const lineY = padTop + plotHeight - (data.cumulative[i] / maxCumulative) * plotHeight;
-      linePoints.push(`${lineX},${lineY}`);
+      linePoints.push(
+        `${padLeft + i * step + step / 2},${padTop + plotHeight - (data.cumulative[i] / maxCumulative) * plotHeight}`,
+      );
     });
 
-    const line = activeDocument.createElementNS(NS, "polyline");
+    const line = activeDocument.createElementNS(SVG_NS, "polyline");
     line.setAttribute("points", linePoints.join(" "));
     line.setAttribute("fill", "none");
     line.setAttribute("stroke", "currentColor");
-    line.setAttribute("stroke-width", "2");
+    line.setAttribute("stroke-width", "1.5");
     line.setAttribute("stroke-linejoin", "round");
     line.setAttribute("stroke-linecap", "round");
     svg.appendChild(line);
 
-    data.cumulative.forEach((value, i) => {
-      const cx = padLeft + i * step + step / 2;
-      const cy = padTop + plotHeight - (value / maxCumulative) * plotHeight;
-      const dot = activeDocument.createElementNS(NS, "circle");
-      dot.setAttribute("cx", `${cx}`);
-      dot.setAttribute("cy", `${cy}`);
-      dot.setAttribute("r", "1.8");
-      dot.setAttribute("fill", "currentColor");
-      svg.appendChild(dot);
-    });
-
     const quarterStep = Math.max(1, Math.floor(data.labels.length / 4));
     data.labels.forEach((label, i) => {
       if (i !== 0 && i !== data.labels.length - 1 && i % quarterStep !== 0) return;
-      const x = padLeft + i * step + step / 2;
-      const text = activeDocument.createElementNS(NS, "text");
+      const text = activeDocument.createElementNS(SVG_NS, "text");
       text.textContent = label.split(" ")[0];
-      text.setAttribute("x", `${x}`);
-      text.setAttribute("y", `${height - 6}`);
+      text.setAttribute("x", `${padLeft + i * step + step / 2}`);
+      text.setAttribute("y", `${height - 4}`);
       text.setAttribute("text-anchor", "middle");
       text.setAttribute("fill", "currentColor");
-      text.setAttribute("fill-opacity", "0.65");
-      text.setAttribute("font-size", "8");
+      text.setAttribute("fill-opacity", "0.7");
+      text.setAttribute("font-size", "10");
       svg.appendChild(text);
     });
 
     wrap.appendChild(svg);
-
-    const sub = wrap.createEl("div", { cls: "galaxy-note-count" });
-    sub.style.color = color;
-    sub.textContent = `${data.totalNotes} total notes in ${data.indexName}`;
+    wrap.createEl("div", { cls: "galaxy-note-count", text: `${data.totalNotes} notes in ${data.indexName}` });
   }
 
   private renderNeighborhoodGraph(container: HTMLElement, centerNode: GNode, byId: Map<string, GNode>) {
-    const wrap = container.createDiv({ cls: "galaxy-subpanel" });
-
-    const heading = wrap.createEl("div", { text: "Local galaxy", cls: "galaxy-section-heading" });
-
-    const graphData = this.getGraphData();
+    const graphData = this.ctx.getGraphData();
     const neighborIds = new Set<string>();
     for (const link of graphData.links) {
       const src = resolveId(link.source);
@@ -383,38 +342,42 @@ export class InspectorPanel {
       if (src === centerNode.id) neighborIds.add(tgt);
       else if (tgt === centerNode.id) neighborIds.add(src);
     }
-    const neighbors = [...neighborIds].map((id) => byId.get(id)).filter(Boolean) as GNode[];
-
+    const neighbors = [...neighborIds].map((id) => byId.get(id)).filter((n): n is GNode => n !== undefined);
     if (neighbors.length === 0) return;
 
-    if (neighbors.length > 20) {
-      heading.textContent = `Local galaxy (${neighbors.length} neighbors)`;
-      const sorted = [...neighbors].sort((a, b) => b.degree - a.degree);
-      const list = wrap.createDiv({ cls: "galaxy-neighbor-list" });
-      for (const n of sorted) {
-        const item = list.createDiv({ cls: "galaxy-neighbor-item" });
-        item.onclick = () => {
-          this.actions.updateHighlight(n);
-          this.show(n);
-          this.actions.flyToNode(n, this.getFlyDist(), this.flyDurSingle);
-        };
-        const dot = item.createEl("span", { cls: "galaxy-neighbor-dot" });
-        dot.style.background = getNodeColor(n, this.getSettings());
-        item.createEl("span", { text: n.name, cls: "galaxy-neighbor-name" });
-        item.createEl("span", { text: `${n.degree} links`, cls: "galaxy-neighbor-degree" });
-      }
-      wrap.appendChild(list);
+    const wrap = container.createDiv({ cls: "galaxy-subpanel" });
+    wrap.createEl("div", {
+      text: `Local galaxy · ${neighbors.length} neighbours`,
+      cls: "galaxy-section-heading",
+    });
+
+    if (neighbors.length > NEIGHBOUR_GRAPH_MAX) {
+      this.renderNeighbourList(wrap, neighbors);
       return;
     }
+    this.renderNeighbourSvg(wrap, centerNode, neighbors, graphData.links);
+  }
 
-    const W = 200,
-      H = 200,
-      CX = 100,
-      CY = 100,
-      R = 70;
-    const NS = "http://www.w3.org/2000/svg";
+  private renderNeighbourList(wrap: HTMLElement, neighbors: GNode[]) {
+    const list = wrap.createDiv({ cls: "galaxy-neighbor-list" });
+    for (const n of [...neighbors].sort((a, b) => b.degree - a.degree)) {
+      const item = list.createDiv({ cls: "galaxy-neighbor-item" });
+      item.onclick = () => this.actions.navigateTo(n);
+      const dot = item.createEl("span", { cls: "galaxy-neighbor-dot" });
+      dot.style.background = this.nodeColor(n);
+      item.createEl("span", { text: n.name, cls: "galaxy-neighbor-name" });
+      item.createEl("span", { text: `${n.degree} links`, cls: "galaxy-neighbor-degree" });
+    }
+  }
 
-    const svg = activeDocument.createElementNS(NS, "svg");
+  private renderNeighbourSvg(wrap: HTMLElement, centerNode: GNode, neighbors: GNode[], links: GLink[]) {
+    const W = 250;
+    const H = 200;
+    const CX = W / 2;
+    const CY = H / 2;
+    const R = 72;
+
+    const svg = activeDocument.createElementNS(SVG_NS, "svg");
     svg.setAttribute("width", `${W}`);
     svg.setAttribute("height", `${H}`);
     svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
@@ -429,64 +392,46 @@ export class InspectorPanel {
 
     const neighborSet = new Set(neighbors.map((n) => n.id));
     neighborSet.add(centerNode.id);
-    for (const link of graphData.links) {
+    for (const link of links) {
       const src = resolveId(link.source);
       const tgt = resolveId(link.target);
       if (!neighborSet.has(src) || !neighborSet.has(tgt)) continue;
       const sp = positions.get(src);
       const tp = positions.get(tgt);
       if (!sp || !tp) continue;
-      const line = activeDocument.createElementNS(NS, "line");
+      const line = activeDocument.createElementNS(SVG_NS, "line");
       line.setAttribute("x1", `${sp.x}`);
       line.setAttribute("y1", `${sp.y}`);
       line.setAttribute("x2", `${tp.x}`);
       line.setAttribute("y2", `${tp.y}`);
-      line.setAttribute("stroke", "rgba(120,160,220,0.25)");
+      line.setAttribute("stroke", "currentColor");
+      line.setAttribute("stroke-opacity", "0.2");
       line.setAttribute("stroke-width", "1");
       svg.appendChild(line);
     }
 
-    const allNodes = [centerNode, ...neighbors];
-    for (const n of allNodes) {
+    for (const n of [centerNode, ...neighbors]) {
       const pos = positions.get(n.id);
       if (!pos) continue;
       const isCenter = n.id === centerNode.id;
-      const r = isCenter ? 8 : Math.max(3, Math.min(7, 3 + Math.sqrt(n.val)));
-      const color = getNodeColor(n, this.getSettings());
-
-      const glow = activeDocument.createElementNS(NS, "circle");
-      glow.setAttribute("cx", `${pos.x}`);
-      glow.setAttribute("cy", `${pos.y}`);
-      glow.setAttribute("r", `${r + 3}`);
-      glow.setAttribute("fill", color);
-      glow.setAttribute("fill-opacity", "0.12");
-      svg.appendChild(glow);
-
-      const circle = activeDocument.createElementNS(NS, "circle");
+      const r = isCenter ? 8 : Math.max(3, Math.min(7, 3 + Math.cbrt(n.val)));
+      const circle = activeDocument.createElementNS(SVG_NS, "circle");
       circle.setAttribute("cx", `${pos.x}`);
       circle.setAttribute("cy", `${pos.y}`);
       circle.setAttribute("r", `${r}`);
-      circle.setAttribute("fill", color);
-      circle.setAttribute("fill-opacity", isCenter ? "1.0" : "0.85");
-      if (!isCenter) {
-        circle.onclick = () => {
-          this.actions.updateHighlight(n);
-          this.show(n);
-          this.actions.flyToNode(n, this.getFlyDist(), this.flyDurSingle);
-        };
-      }
+      circle.setAttribute("fill", this.nodeColor(n));
+      if (!isCenter) circle.onclick = () => this.actions.navigateTo(n);
       svg.appendChild(circle);
 
       if (!isCenter) {
-        const svgText = activeDocument.createElementNS(NS, "text");
-        const trimmed = n.name.length > 9 ? n.name.slice(0, 9) + "…" : n.name;
-        svgText.textContent = trimmed;
+        const svgText = activeDocument.createElementNS(SVG_NS, "text");
+        svgText.textContent = n.name.length > 11 ? n.name.slice(0, 11) + "…" : n.name;
         svgText.setAttribute("x", `${pos.x}`);
-        svgText.setAttribute("y", `${pos.y + r + 9}`);
+        svgText.setAttribute("y", `${pos.y + r + 11}`);
         svgText.setAttribute("text-anchor", "middle");
         svgText.setAttribute("fill", "currentColor");
-        svgText.setAttribute("fill-opacity", "0.65");
-        svgText.setAttribute("font-size", "7");
+        svgText.setAttribute("fill-opacity", "0.75");
+        svgText.setAttribute("font-size", "10");
         svg.appendChild(svgText);
       }
     }

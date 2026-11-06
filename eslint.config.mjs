@@ -23,8 +23,8 @@ export default tseslint.config(
       complexity: ["error", { max: 20 }],
       "max-depth": ["error", { max: 4 }],
       "max-nested-callbacks": ["error", { max: 4 }],
-      "max-params": ["error", { max: 7 }],
-      "max-lines-per-function": ["error", { max: 550, skipBlankLines: true, skipComments: true }],
+      "max-params": ["error", { max: 5 }],
+      "max-lines-per-function": ["error", { max: 120, skipBlankLines: true, skipComments: true }],
       "max-lines": ["error", { max: 1000, skipBlankLines: true, skipComments: true }],
       // No silent suppression of checks.
       "@typescript-eslint/ban-ts-comment": [

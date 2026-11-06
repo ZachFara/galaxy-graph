@@ -1,13 +1,13 @@
 import { Plugin, WorkspaceLeaf } from "obsidian";
 import { GalaxyView, VIEW_TYPE_GALAXY } from "./src/GalaxyView";
-import { DEFAULT_SETTINGS, type GalaxySettings } from "./src/settings";
+import { DEFAULT_SETTINGS, sanitizeSettings, type GalaxySettings } from "./src/settings";
 
 export default class GalaxyPlugin extends Plugin {
   override settings: GalaxySettings = { ...DEFAULT_SETTINGS };
 
   override async onload() {
-    const saved = ((await this.loadData()) ?? {}) as Partial<GalaxySettings>;
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, saved);
+    const saved = sanitizeSettings(await this.loadData());
+    this.settings = { ...DEFAULT_SETTINGS, ...saved };
     this.registerView(VIEW_TYPE_GALAXY, (leaf: WorkspaceLeaf) => new GalaxyView(leaf, this));
     this.addRibbonIcon("share-2", "Open galaxy view", () => this.openView());
     this.addCommand({
